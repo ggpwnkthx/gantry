@@ -251,7 +251,7 @@ The largest risk is the Preact integration, which HonoX documents but does not s
 
 **Open questions**
 
-- [ ] Does `POST /v1/access-context` accept an empty `workspaceId` for a route-only question? Check in Milestone 0; if not, ask Hub for that case.
-- [ ] Is Prometheus available in every deployment, or should the gantry scrape `/metrics` itself as a fallback?
+- [x] Does `POST /v1/access-context` accept an empty `workspaceId` for a route-only question? Check in Milestone 0; if not, ask Hub for that case. **Answered in the milestone 0: it does not; the question is asked with a placeholder. The request and the answer are in [decisions.md](decisions.md) (D-003).**
+- [x] Is Prometheus available in every deployment, or should the gantry scrape `/metrics` itself as a fallback? **Answered in the milestone 2: the gantry reads the metrics of the replicas it probes, and Prometheus is not needed in v1. The decision is in [decisions.md](decisions.md) (D-016).**
 - [ ] Which host does the gantry live on: its own (`admin.example.com`) or a path on an existing host?
-- [ ] Live updates: polling every 15 s in v1, or server-sent events (Shuttle already streams them) from the start?
+- [x] Live updates: polling every 15 s in v1, or server-sent events (Shuttle already streams them) from the start? **Answered in the milestone 2: the island reads the status every fifteen seconds through the same origin. The decision is in [decisions.md](decisions.md) (D-020).**

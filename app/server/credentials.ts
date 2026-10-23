@@ -39,7 +39,7 @@ const readFiles = new Map<string, { modifiedAt: number; value: string }>()
  * credential is a new content of the file, and Gantry has to see it
  * without a restart.
  */
-async function readSecretFile(path: string): Promise<string> {
+export async function readSecretFile(path: string): Promise<string> {
   const info = await stat(path)
   const cached = readFiles.get(path)
   if (cached && cached.modifiedAt === info.mtimeMs) return cached.value

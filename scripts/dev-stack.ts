@@ -64,6 +64,8 @@ const ADMIN_TOKEN = 'the-admin-token-of-the-stack'
 const ACCESS_TOKEN = 'the-access-token-of-the-stack'
 const ACCESS_CONTEXT_TOKEN = 'the-access-context-token-of-the-stack'
 const SESSION_SECRET = 'the-session-secret-of-the-stack'
+const SHUTTLE_METRICS_TOKEN = 'the-metrics-token-of-the-gateway-of-the-stack'
+const HUB_METRICS_TOKEN = 'the-metrics-token-of-hub-of-the-stack'
 const CLIENT_ID = 'shuttle-acme'
 const CLIENT_SECRET = 'the-secret-of-the-gateway-of-the-stack'
 
@@ -389,6 +391,7 @@ async function main(): Promise<void> {
       }),
       HUB_ACCESS_TOKEN: ACCESS_TOKEN,
       HUB_ACCESS_CONTEXT_TOKENS: JSON.stringify({ [ACCESS_CONTEXT_TOKEN]: null }),
+      HUB_METRICS_TOKEN,
       HUB_SECRET_ENCRYPTION_KEY: 'a'.repeat(64),
       HUB_STATE_SECRET: 'b'.repeat(64),
       HUB_SIGNING_KEY: await hubSigningKey(),
@@ -445,7 +448,7 @@ async function main(): Promise<void> {
     email: OPERATOR.email,
     displayName: OPERATOR.name,
   })
-  await admin(hubUrl, '/v1/admin/users', 'POST', {
+  const otherPrincipal = await admin(hubUrl, '/v1/admin/users', 'POST', {
     tenant: OTHER_TENANT.slug,
     externalSubject: BOB.subject,
     email: BOB.email,
@@ -463,6 +466,30 @@ async function main(): Promise<void> {
     permission: 'gantry.platform',
     routeId: 'gantry',
   })
+  await admin(hubUrl, '/v1/admin/grants', 'PUT', {
+    tenant: TENANT.slug,
+    userId: operator.id,
+    permission: 'gantry.status',
+    routeId: 'gantry',
+  })
+  // The other tenant has traffic as well: a gateway has one client of Hub
+  // and authenticates the principals of one tenant, so the traffic of the
+  // other tenant is asked for here. It is what makes the row of the other
+  // tenant exist in the numbers of Hub, and what makes the isolation of
+  // the tenants visible.
+  await fetch(`${hubUrl}/v1/decisions`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ACCESS_TOKEN}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      subject: otherPrincipal.id,
+      routeId: 'gantry',
+      roles: [],
+    }),
+  })
+
   // The question of the plan about the access context: the empty
   // `workspaceId` of the question of the plan, and a placeholder, which is
   // the way a question about a route alone can be asked.
@@ -506,6 +533,7 @@ async function main(): Promise<void> {
       SHUTTLE_COOKIE_SECURE: 'false',
       SHUTTLE_EXTERNAL_PROTO: 'http',
       SHUTTLE_IDENTITY_SIGNING_KEY: keys.privateKey,
+      SHUTTLE_METRICS_TOKEN,
       SHUTTLE_LOG_LEVEL: 'info',
     },
     stdout: 'inherit',
@@ -531,6 +559,10 @@ async function main(): Promise<void> {
   )
   const accessContextFile = join(keysDirectory, 'hub-access-context-token')
   await writeFile(accessContextFile, ACCESS_CONTEXT_TOKEN)
+  const shuttleMetricsTokenFile = join(keysDirectory, 'shuttle-metrics-token')
+  await writeFile(shuttleMetricsTokenFile, SHUTTLE_METRICS_TOKEN)
+  const hubMetricsTokenFile = join(keysDirectory, 'hub-metrics-token')
+  await writeFile(hubMetricsTokenFile, HUB_METRICS_TOKEN)
 
   // Gantry: the upstream. It runs the build of the deployment.
   if (!existsSync(join(process.cwd(), 'dist', 'index.js'))) {
@@ -553,6 +585,10 @@ async function main(): Promise<void> {
       GANTRY_HUB_URL: hubUrl,
       GANTRY_HUB_ADMIN_TOKENS_FILE: adminTokensFile,
       GANTRY_HUB_ACCESS_CONTEXT_TOKEN_FILE: accessContextFile,
+      GANTRY_SHUTTLE_REPLICAS: shuttleUrl,
+      GANTRY_HUB_REPLICAS: hubUrl,
+      GANTRY_SHUTTLE_METRICS_TOKEN_FILE: shuttleMetricsTokenFile,
+      GANTRY_HUB_METRICS_TOKEN_FILE: hubMetricsTokenFile,
     },
     stdout: 'inherit',
     stderr: 'inherit',

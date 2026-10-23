@@ -87,6 +87,7 @@ p {
 
 table {
   width: 100%;
+  max-width: 64rem;
   margin: var(--space-4) 0 var(--space-6);
   border-collapse: collapse;
   font-size: var(--size-text-sm);
@@ -107,6 +108,13 @@ td {
   vertical-align: top;
 }
 
+/* The numbers are read down a column: they are right aligned. */
+th:last-child,
+td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .counter button {
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--color-border);
@@ -124,4 +132,143 @@ td {
 .counter button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/*
+ * The status of a service.
+ *
+ * A tile is a number and its name, and the name is what says what the
+ * number is: the number is read first, but the reader has to know what
+ * they are reading. A colour that is not a state is not used.
+ */
+
+.status-source {
+  color: var(--color-text-muted);
+  font-size: var(--size-text-sm);
+}
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-6);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 10rem;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.tile-value {
+  font-family: var(--font-mono);
+  font-size: var(--size-text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-value-ok {
+  color: var(--color-status-ok);
+}
+
+.tile-value-warn {
+  color: var(--color-status-warn);
+}
+
+.tile-value-error {
+  color: var(--color-status-error);
+}
+
+.tile-label {
+  color: var(--color-text-muted);
+  font-size: var(--size-text-sm);
+}
+
+.tile-state {
+  font-size: var(--size-text-sm);
+}
+
+.tile-state-ok {
+  color: var(--color-status-ok);
+}
+
+.tile-state-warn {
+  color: var(--color-status-warn);
+}
+
+.tile-state-error {
+  color: var(--color-status-error);
+}
+
+.state {
+  font-family: var(--font-mono);
+}
+
+.state-ready {
+  color: var(--color-status-ok);
+}
+
+.state-not-ready {
+  color: var(--color-status-warn);
+}
+
+.state-unreachable {
+  color: var(--color-status-error);
+}
+
+.pending {
+  margin: var(--space-6) 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.pending h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--size-text-lg);
+  font-weight: 600;
+}
+
+.pending ul {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.pending li {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--size-text-sm);
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+header nav a {
+  margin-right: var(--space-4);
+  color: var(--color-accent);
+}
+
+#scope-header {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--size-text-sm);
+}
+
+@media (max-width: 480px) {
+  .tile {
+    min-width: 8rem;
+  }
 }

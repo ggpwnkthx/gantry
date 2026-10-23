@@ -6,15 +6,16 @@ import { join } from 'node:path'
 /**
  * The stack of the development, with a browser in front of it.
  *
- * The test proves the three halves of the security model of the plan:
+ * The test proves the four halves of the security model and of the status
+ * of the plan:
  *
  * 1. a browser that logs in at the gateway reaches the page of Gantry, and
  *    the identity of the caller is verified,
  * 2. the scope of the caller is the one of Hub: a tenant operator sees the
- *    principals of its own tenant and nothing else, and an operator of the
- *    platform sees the tenants,
- * 3. a request that skips the gateway is refused with a `401`: the request
- *    that did not go through Shuttle cannot act as anyone.
+ *    numbers of its own tenant and nothing else,
+ * 3. the numbers of the services are the numbers of the real services, and
+ *    the panels that a service does not carry yet say so,
+ * 4. a request that skips the gateway is refused with a `401`.
  */
 
 /** The stack, as the script of the stack writes it. */
@@ -31,13 +32,8 @@ interface Stack {
   subjects: { alice: string; operator: string; bob: string }
 }
 
-/** Waits, without the runtime of the tests: the workers of the browser may
- * run under Node and not under Bun. */
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds)
-  })
-}
+/** The console of the browser. */
+const messages: string[] = []
 
 /** Reads the description of the stack, when the script has written it. */
 async function readStack(): Promise<Stack> {
@@ -51,10 +47,15 @@ async function readStack(): Promise<Stack> {
   throw new Error('the stack did not write its description')
 }
 
-/** The console of the browser. */
-const messages: string[] = []
+/** Waits, without the runtime of the tests: the workers of the browser may
+ * run under Node and not under Bun. */
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds)
+  })
+}
 
-test('a browser logs in at the gateway and reaches Gantry', async ({ page }) => {
+test('a browser logs in at the gateway and reaches the status of the gateway', async ({ page }) => {
   const stack = await readStack()
   messages.length = 0
   page.on('console', (message) => {
@@ -68,31 +69,45 @@ test('a browser logs in at the gateway and reaches Gantry', async ({ page }) => 
 
   // The page of Gantry is reached, and the identity of the caller is the
   // one of the principal of Hub.
-  await expect(page.locator('#identity')).toContainText(stack.principal)
+  await expect(page.locator('#scope-header')).toContainText(stack.tenant)
 
-  // The scope of the caller is the one of Hub: the tenant of the caller
-  // and the keys that Hub holds for it.
-  await expect(page.locator('#tenant')).toContainText(stack.tenant)
-  await expect(page.locator('#keys')).toContainText('gantry.status')
-  await expect(page.locator('#scope')).toContainText('its own tenant')
+  // The numbers of the gateway are the numbers of the real gateway, and
+  // its replica is ready.
+  await expect(page.locator('#replicas')).toContainText('ready')
+  await expect(page.locator('[data-tile="the requests"]')).toContainText(/\d+/)
+  await expect(page.locator('[data-tile="the failures of the upstreams"]')).toBeVisible()
 
-  // The gate of the milestone 1: a tenant operator sees the principals of
-  // its own tenant, and the principal of the other tenant of the platform
-  // is not one of them.
-  await expect(page.locator('#principals')).toContainText('alice@acme.example')
-  await expect(page.locator('#principals')).not.toContainText('bob@globex.example')
+  // The panels that need a change of Shuttle say so.
+  await expect(page.locator('#pending')).toContainText('needs Shuttle 1.4.0')
 
-  // The island of the page hydrates in the output of the build.
-  const button = page.locator('#counter')
-  await expect(button).toHaveText('clicks: 0')
-  await button.click()
-  await expect(button).toHaveText('clicks: 1')
-  await expect(page.locator('#slot-child')).toHaveText('the child of the island')
-
+  // The island of the page hydrates: the console of the browser is empty.
   expect(messages).toEqual([])
 })
 
-test('an operator of the platform sees the tenants of the platform', async ({ browser }) => {
+test('a browser reads the status of Hub', async ({ page }) => {
+  const stack = await readStack()
+  await page.goto(stack.login)
+  await page.goto(`${stack.shuttle}/hub`)
+
+  await expect(page.locator('h1')).toContainText('Hub')
+  await expect(page.locator('#replicas')).toContainText('ready')
+  await expect(page.locator('[data-tile="the decisions"]')).toContainText(/\d+/)
+  await expect(page.locator('#pending')).toContainText('needs Hub 1.0.2')
+})
+
+test('a tenant operator reads the numbers of its own tenant and nothing else', async ({ page }) => {
+  const stack = await readStack()
+  await page.goto(stack.login)
+  await page.goto(`${stack.shuttle}/hub`)
+
+  // The breakdown by tenant of the decisions of Hub: a tenant operator
+  // reads the row of its own tenant and not the row of the other tenant.
+  const breakdown = page.locator('table', { hasText: 'the decisions by tenant' })
+  await expect(breakdown).toContainText(stack.tenant)
+  await expect(breakdown).not.toContainText(stack.otherTenant)
+})
+
+test('an operator of the platform reads the numbers of every tenant', async ({ browser }) => {
   const stack = await readStack()
 
   // The provider of the identity authenticates the next caller as the
@@ -105,14 +120,16 @@ test('an operator of the platform sees the tenants of the platform', async ({ br
   const page = await context.newPage()
   await page.goto(stack.login)
 
-  await expect(page.locator('#scope')).toContainText('the platform')
-  await expect(page.locator('#tenants')).toContainText(stack.tenant)
-  await expect(page.locator('#tenants')).toContainText(stack.otherTenant)
+  await expect(page.locator('#scope-header')).toContainText('the platform')
+  await page.goto(`${stack.shuttle}/hub`)
+  const breakdown = page.locator('table', { hasText: 'the decisions by tenant' })
+  await expect(breakdown).toContainText(stack.tenant)
+  await expect(breakdown).toContainText(stack.otherTenant)
   await context.close()
 })
 
 test('a request that skips the gateway is refused', async ({ request }) => {
   const stack = await readStack()
-  const response = await request.get(`${stack.gantry}/`)
+  const response = await request.get(`${stack.gantry}/shuttle`)
   expect(response.status()).toBe(401)
 })
