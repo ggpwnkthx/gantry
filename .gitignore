@@ -111,3 +111,13 @@ dist
 
 # TernJS port file
 .tern-port
+
+# the clones of the pinned revisions and the data of the development stack
+.deps/
+
+# the keys of the tests
+test/fixtures/*.pem
+
+# the output of the tests of the browser
+test-results/
+playwright-report/

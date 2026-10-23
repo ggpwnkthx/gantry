@@ -1,0 +1,36 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/server.ts",
+    "app/client.ts",
+    "app/routes/**/*.ts",
+    "app/routes/**/*.tsx",
+    "test/**/*.ts",
+    "scripts/*.ts"
+  ],
+  "project": [
+    "app/**",
+    "test/**",
+    "scripts/**",
+    "*.config.ts"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "includeEntryExports": false,
+  "ignoreIssues": {
+    "test/**": [
+      "exports",
+      "types"
+    ],
+    "scripts/**": [
+      "exports",
+      "types"
+    ],
+    "app/**": [
+      "exports",
+      "types"
+    ]
+  },
+  "ignoreBinaries": [
+    "index.js"
+  ]
+}
