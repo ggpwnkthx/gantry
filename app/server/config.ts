@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { importSPKI, type KeyInput } from 'jose'
 import { z } from 'zod'
 import { readSecretFile } from './credentials'
+import { type ControlTokens, readControlTokens } from './clients/shuttle-control'
 
 /**
  * The settings of Gantry.
@@ -26,6 +27,12 @@ export interface Settings {
   hubMetricsToken?: string
   /** The interval of the refresh of the islands, in milliseconds. */
   refreshMs: number
+  /** The url of the control plane of Shuttle. */
+  shuttleControlUrl?: string
+  /** The tokens of the control plane of Shuttle. */
+  shuttleControlTokens?: ControlTokens
+  /** The origins that may write. */
+  allowedOrigins: string[]
 }
 
 /** The environment of the server. */
@@ -38,6 +45,9 @@ const EnvironmentSchema = z.object({
   GANTRY_HUB_REPLICAS: z.string().optional(),
   GANTRY_HUB_METRICS_TOKEN_FILE: z.string().min(1).optional(),
   GANTRY_STATUS_REFRESH_MS: z.coerce.number().int().min(1_000).max(600_000).default(15_000),
+  GANTRY_SHUTTLE_CONTROL_URL: z.string().url().optional(),
+  GANTRY_SHUTTLE_CONTROL_TOKENS_FILE: z.string().min(1).optional(),
+  GANTRY_ALLOWED_ORIGINS: z.string().optional(),
 })
 
 /** The keys that were imported, by the PEM they come from. */
@@ -94,6 +104,9 @@ export async function readSettings(environment: Record<string, unknown>): Promis
   const hubMetricsToken = parsed.GANTRY_HUB_METRICS_TOKEN_FILE
     ? (await readSecretFile(parsed.GANTRY_HUB_METRICS_TOKEN_FILE)).trim()
     : undefined
+  const shuttleControlTokens = parsed.GANTRY_SHUTTLE_CONTROL_TOKENS_FILE
+    ? readControlTokens(await readSecretFile(parsed.GANTRY_SHUTTLE_CONTROL_TOKENS_FILE))
+    : undefined
   return {
     port: parsed.GANTRY_PORT,
     shuttleIdentityPublicKey: await readPublicKey(environment),
@@ -102,5 +115,13 @@ export async function readSettings(environment: Record<string, unknown>): Promis
     ...(shuttleMetricsToken ? { shuttleMetricsToken } : {}),
     ...(hubMetricsToken ? { hubMetricsToken } : {}),
     refreshMs: parsed.GANTRY_STATUS_REFRESH_MS,
+    ...(parsed.GANTRY_SHUTTLE_CONTROL_URL
+      ? { shuttleControlUrl: parsed.GANTRY_SHUTTLE_CONTROL_URL }
+      : {}),
+    ...(shuttleControlTokens ? { shuttleControlTokens } : {}),
+    allowedOrigins: (parsed.GANTRY_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
   }
 }

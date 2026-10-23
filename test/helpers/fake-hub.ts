@@ -107,6 +107,52 @@ export async function startFakeHub(options: FakeHubOptions): Promise<FakeHub> {
         return Response.json({ tenants })
       }
 
+      if (url.pathname === '/v1/admin/groups' && request.method === 'POST') {
+        const body = (await request.json()) as { key: string; displayName?: string }
+        return Response.json(
+          {
+            id: `group-${body.key}`,
+            tenant: 'acme',
+            key: body.key,
+            displayName: body.displayName ?? body.key,
+            members: [],
+          },
+          { status: 201 }
+        )
+      }
+
+      if (url.pathname === '/v1/admin/grants' && request.method === 'PUT') {
+        const body = (await request.json()) as {
+          permission: string
+          routeId?: string | null
+          grantedBy?: string
+          group?: string
+          userId?: string
+        }
+        return Response.json(
+          {
+            id: `grant-${body.permission}-${body.routeId ?? 'every'}`,
+            tenant: 'acme',
+            permission: body.permission,
+            userId: body.userId ?? null,
+            group: body.group ?? null,
+            routeId: body.routeId ?? null,
+            workspaceId: null,
+            expiresAt: null,
+            grantedBy: body.grantedBy ?? null,
+          },
+          { status: 201 }
+        )
+      }
+
+      if (url.pathname.startsWith('/v1/admin/grants/') && request.method === 'DELETE') {
+        return new Response(null, { status: 204 })
+      }
+
+      if (url.pathname === '/v1/admin/audit') {
+        return Response.json({ records: [], total: 0, limit: 50, offset: 0 })
+      }
+
       if (url.pathname === '/v1/admin/users') {
         const asked = url.searchParams.get('tenant')
         if (tenant !== null && asked !== null && asked !== tenant) {

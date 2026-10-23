@@ -1,5 +1,7 @@
 import type { MiddlewareHandler } from 'hono'
 import { env } from 'hono/adapter'
+import { csrf } from 'hono/csrf'
+import { requestId } from 'hono/request-id'
 import type { KeyInput } from 'jose'
 import { readPublicKey } from '../server/config'
 import { type UpstreamIdentity, verifyIdentity } from '../server/identity'
@@ -21,6 +23,7 @@ export type IdentityEnv = {
   Variables: {
     identity: UpstreamIdentity
     operator: ResolvedOperator
+    requestId: string
   }
 }
 
@@ -129,4 +132,36 @@ export const scopeMiddleware: MiddlewareHandler<IdentityEnv> = async (c, next) =
   await next()
 }
 
-export default [identityMiddleware, scopeMiddleware]
+/**
+ * The check of the origin of a write.
+ *
+ * A write is a request that changes something, and a request that changes
+ * something must come from the site of the console: the origin of the
+ * browser is compared with the origin the caller used, which is the host of
+ * the header `x-forwarded-host` and the protocol of the header
+ * `x-forwarded-proto`.
+ */
+export const originMiddleware: MiddlewareHandler<IdentityEnv> = async (c, next) => {
+  const method = c.req.method.toUpperCase()
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    await next()
+    return
+  }
+  const environment = env(c) as Record<string, unknown>
+  const allowed = environment.GANTRY_ALLOWED_ORIGINS
+  const configured = (typeof allowed === 'string' ? allowed : '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0)
+  const host = c.req.header('x-forwarded-host')
+  const proto = c.req.header('x-forwarded-proto') ?? 'http'
+  const origins = host ? [...configured, `${proto}://${host}`] : configured
+  await csrf({
+    origin: (origin: string) => origins.includes(origin),
+    secFetchSite: 'same-origin',
+  })(c, async () => {
+    await next()
+  })
+}
+
+export default [requestId(), identityMiddleware, scopeMiddleware, originMiddleware]

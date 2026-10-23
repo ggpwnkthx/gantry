@@ -56,6 +56,16 @@ async function call(path: string) {
 }
 
 beforeAll(async () => {
+  // The environment is the one of the process: every file of the tests
+  // names the environment it needs, so that the order of the files does
+  // not change the answer of a test.
+  for (const name of [
+    'GANTRY_SHUTTLE_CONTROL_URL',
+    'GANTRY_SHUTTLE_CONTROL_TOKENS_FILE',
+    'GANTRY_ALLOWED_ORIGINS',
+  ]) {
+    delete process.env[name]
+  }
   directory = await mkdtemp(join(tmpdir(), 'gantry-status-'))
   const tokenFile = join(directory, 'metrics-token')
   await writeFile(tokenFile, METRICS_TOKEN)

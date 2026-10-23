@@ -80,6 +80,18 @@ let hub: FakeHub
 let directory: string
 
 beforeAll(async () => {
+  // The environment is the one of the process: every file of the tests
+  // names the environment it needs, so that the order of the files does
+  // not change the answer of a test.
+  for (const name of [
+    'GANTRY_SHUTTLE_CONTROL_URL',
+    'GANTRY_SHUTTLE_CONTROL_TOKENS_FILE',
+    'GANTRY_ALLOWED_ORIGINS',
+    'GANTRY_SHUTTLE_REPLICAS',
+    'GANTRY_HUB_REPLICAS',
+  ]) {
+    delete process.env[name]
+  }
   directory = await mkdtemp(join(tmpdir(), 'gantry-scope-'))
   const adminTokens = join(directory, 'hub-admin-tokens.json')
   await writeFile(adminTokens, JSON.stringify(credentials))
@@ -165,7 +177,9 @@ describe('the scope of the operator', () => {
     const response = await call(bob)
     expect(response.status).toBe(200)
     const body = await response.text()
-    expect(body).toContain('id="scope-header">the platform — gantry.status, gantry.platform<')
+    expect(body).toContain(
+      'id="scope-header">the platform — gantry.admin, gantry.platform, gantry.status<'
+    )
   })
 
   test('a request without a signature is refused', async () => {
@@ -197,8 +211,10 @@ describe('the scope of the operator', () => {
     expect(second).toBe(first)
   })
 
-  test('the route of the administration answers that it is not there yet', async () => {
+  test('a write from another site is refused', async () => {
+    // The origin of a write is the origin the caller used: a write that
+    // comes from somewhere else is refused before it reaches a route.
     const response = await call(alice, { method: 'POST', path: '/' })
-    expect(response.status).toBe(405)
+    expect(response.status).toBe(403)
   })
 })
