@@ -1,0 +1,12 @@
+{
+  "shuttle": {
+    "repository": "https://github.com/ggpwnkthx/shuttle.git",
+    "commit": "0e09a420f8d5f7f3e2eea63512f808ce4ae215e0",
+    "version": "1.3.0"
+  },
+  "hub": {
+    "repository": "https://github.com/ggpwnkthx/hub.git",
+    "commit": "ccbcaa468ed66e336fbfe6d10a4196cbcb1b05ec",
+    "version": "1.0.1"
+  }
+}

@@ -1,0 +1,33 @@
+name: the checks of Gantry
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: the dependencies are installed
+        run: bun install --frozen-lockfile
+      - name: the types are checked
+        run: bun run typecheck
+      - name: the code is linted
+        run: bun run lint
+      - name: the format is checked
+        run: bun run format:check
+      - name: the dead code is found
+        run: bun run dead
+      - name: the tests run
+        run: bun run test
+      - name: the build runs
+        run: bun run build
+      - name: the browsers are installed
+        run: bun x playwright install --with-deps chromium
+      - name: the island is tested in the built output
+        run: bun run test:browser
