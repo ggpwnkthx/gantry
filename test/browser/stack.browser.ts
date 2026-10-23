@@ -31,6 +31,14 @@ interface Stack {
   subjects: { alice: string; operator: string; bob: string }
 }
 
+/** Waits, without the runtime of the tests: the workers of the browser may
+ * run under Node and not under Bun. */
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds)
+  })
+}
+
 /** Reads the description of the stack, when the script has written it. */
 async function readStack(): Promise<Stack> {
   const file = join(process.cwd(), '.deps', 'stack.json')
@@ -38,7 +46,7 @@ async function readStack(): Promise<Stack> {
     if (existsSync(file)) {
       return JSON.parse(await readFile(file, 'utf8')) as Stack
     }
-    await Bun.sleep(500)
+    await wait(500)
   }
   throw new Error('the stack did not write its description')
 }
