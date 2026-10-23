@@ -9,10 +9,10 @@
     "url": "git+https://github.com/ggpwnkthx/gantry.git"
   },
   "scripts": {
-    "dev": "bunx --bun vite",
+    "dev": "bun x --bun vite",
     "dev:stack": "bun run scripts/dev-stack.ts",
     "build": "vite build --mode client && vite build",
-    "start": "cd dist && bun index.js",
+    "start": "cd dist && PORT=${GANTRY_PORT:-3000} bun index.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint",
     "format": "biome format --write .",

@@ -448,6 +448,7 @@ async function main(): Promise<void> {
     env: {
       PATH: process.env.PATH ?? '',
       HOME: process.env.HOME ?? '',
+      GANTRY_PORT: String(gantryPort),
       PORT: String(gantryPort),
       GANTRY_SHUTTLE_IDENTITY_PUBLIC_KEY_FILE: join(keysDirectory, 'identity-public.pem'),
     },
