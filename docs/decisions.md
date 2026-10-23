@@ -47,10 +47,25 @@ smaller. It is a decision for Milestone 1.
 own change, once the tests of Milestone 0 pass on it. The spike starts on
 10.29.8; the move is the next commit of the branch.
 
-**The evidence.** The suite of the island — the tests of the browser against
-the built output — passes on 10.29.8 and on 11.0.1: the same two tests, the
-same assertions, the same empty console. The result of the move is in the
-commit that makes it.
+**The evidence.** The suite of the island passes on the two versions: the
+same two tests of the browser against the built output, the same assertions,
+the same empty console of the browser.
+
+| Version | `bun x playwright test` | `bun x playwright test -c playwright.stack.config.ts` | `bun run test` |
+| --- | --- | --- | --- |
+| `preact@10.29.8` | 2 passed | 2 passed | 17 pass |
+| `preact@11.0.1` | 2 passed | 2 passed | 17 pass |
+
+Neither `preact/compat` nor the preset of the Vite breaks with Preact 11:
+the alias of `vite.config.ts` is the same, and the wrapper of the island of
+HonoX hydrates the same way. The client is 2.3 kB smaller with Preact 11
+(37.4 kB instead of 39.7 kB), because the runtime of the islands is smaller.
+
+**The decision that follows.** The branch ends on `preact@11.0.1`: the plan
+says to move once the tests pass on it, and they pass. The risk of the plan
+— "Preact 11 breaks `preact/compat` or the Vite preset" — did not happen,
+and the compatibility suite of the milestone 3 will say the same thing about
+the two versions.
 
 ## D-003 — The access context of Hub refuses an empty `workspaceId`
 
