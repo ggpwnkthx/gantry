@@ -49,17 +49,18 @@ describe('the identity of a request', () => {
     expect(response.status).toBe(401)
   })
 
-  test('a request with a valid signature is answered', async () => {
+  test('a request with a valid signature passes the identity check', async () => {
     const signature = await signIdentity({
       privateKeyPem: keys.privateKeyPem,
       identity,
       request,
     })
     const response = await call('/', signature)
-    expect(response.status).toBe(200)
-    const body = await response.text()
-    expect(body).toContain('<!doctype html>')
-    expect(body).toContain('the caller is the-subject-of-the-caller')
+    // The identity is verified: the request is not refused with a `401`.
+    // The scope of the caller is the next check, and it refuses the
+    // request here, because the test has no Hub.
+    expect(response.status).not.toBe(401)
+    expect(response.status).toBe(403)
   })
 
   test('a tampered header is refused', async () => {

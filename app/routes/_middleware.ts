@@ -3,6 +3,10 @@ import { env } from 'hono/adapter'
 import type { KeyInput } from 'jose'
 import { readPublicKey } from '../server/config'
 import { type UpstreamIdentity, verifyIdentity } from '../server/identity'
+import { scopeCache } from '../server/cache'
+import { HubError } from '../server/clients/hub-admin'
+import { type Hub, readHub } from '../server/hub'
+import { type ResolvedOperator, resolveOperatorScope, ScopeError } from '../server/operator'
 
 /**
  * The paths that are answered without an identity.
@@ -12,8 +16,13 @@ import { type UpstreamIdentity, verifyIdentity } from '../server/identity'
  */
 const EXEMPT_PATHS = new Set(['/healthz', '/readyz'])
 
-/** The bindings of the context: the identity of the caller. */
-export type IdentityEnv = { Variables: { identity: UpstreamIdentity } }
+/** The bindings of the context: the identity and the scope of the caller. */
+export type IdentityEnv = {
+  Variables: {
+    identity: UpstreamIdentity
+    operator: ResolvedOperator
+  }
+}
 
 /**
  * The check of the identity of a request.
@@ -63,4 +72,61 @@ export const identityMiddleware: MiddlewareHandler<IdentityEnv> = async (c, next
   await next()
 }
 
-export default [identityMiddleware]
+/**
+ * The check of the scope of the caller.
+ *
+ * The scope says what the caller may do inside Gantry, and Hub decides it:
+ * Gantry reads the principal of the caller, it reads the keys that Hub
+ * holds for the caller on the route of Gantry, and it chooses the
+ * credential of the tenant of the caller. A caller without a scope is
+ * refused with a `403`.
+ */
+export const scopeMiddleware: MiddlewareHandler<IdentityEnv> = async (c, next) => {
+  const url = new URL(c.req.url)
+  if (EXEMPT_PATHS.has(url.pathname)) {
+    await next()
+    return
+  }
+
+  const identity = c.get('identity')
+  if (!identity) {
+    return c.text('the identity of the request is not verified', 401)
+  }
+
+  const cached = scopeCache.get(identity.subject)
+  if (cached) {
+    c.set('operator', cached)
+    await next()
+    return
+  }
+
+  const environment = env(c) as Record<string, unknown>
+  let hub: Hub
+  try {
+    hub = await readHub(environment)
+  } catch (error) {
+    return c.text(`the configuration of Hub is not loaded: ${String(error)}`, 500)
+  }
+
+  try {
+    const operator = await resolveOperatorScope({
+      identity,
+      credentials: hub.credentials,
+      admin: hub.admin,
+      accessContext: hub.accessContext(),
+    })
+    scopeCache.set(identity.subject, operator, operator.validUntil)
+    c.set('operator', operator)
+  } catch (error) {
+    if (error instanceof ScopeError) {
+      return c.text(`the caller has no scope: ${error.message}`, 403)
+    }
+    if (error instanceof HubError) {
+      return c.text(`the access service is not available: ${error.message}`, 503)
+    }
+    throw error
+  }
+  await next()
+}
+
+export default [identityMiddleware, scopeMiddleware]

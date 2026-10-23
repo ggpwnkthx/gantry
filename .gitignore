@@ -121,3 +121,11 @@ test/fixtures/*.pem
 # the output of the tests of the browser
 test-results/
 playwright-report/
+
+# the design tooling: the skills are installed with
+# `impeccable install --providers=claude,pi --scope=project`
+.claude/
+.pi/
+
+# the local configuration of the design tooling
+.impeccable/config.local.json

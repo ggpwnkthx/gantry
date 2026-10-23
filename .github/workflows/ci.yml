@@ -31,3 +31,51 @@ jobs:
         run: bun x playwright install --with-deps chromium
       - name: the island is tested in the built output
         run: bun run test:browser
+
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: the dependencies are installed
+        run: bun install --frozen-lockfile
+      - name: the browsers are installed
+        run: bun x playwright install --with-deps chromium
+      - name: the stack of the development is tested with a browser
+        # The script of the stack clones the pinned revisions of Shuttle and
+        # of Hub, it starts them with their embedded database, and it
+        # registers the tenant, the principal and the grant.
+        run: bun x playwright test -c playwright.stack.config.ts --workers=1
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: the image is built
+        run: |
+          docker build -f deploy/Dockerfile -t gantry:${{ github.sha }} .
+      - name: the image runs
+        run: |
+          docker run --detach --name gantry --publish 3000:3000 gantry:${{ github.sha }}
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/healthz > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+      - name: the probe of the process answers
+        run: curl -fsS http://127.0.0.1:3000/healthz
+      - name: the probe of the readiness answers that the key is not there
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/readyz)
+          test "$status" = "503" || (echo "the readiness answered $status" && exit 1)
+      - name: the image holds nothing but the output of the build
+        run: |
+          docker run --rm --entrypoint sh gantry:${{ github.sha }} -c \
+            'test -f /app/index.js && test ! -d /app/src && test ! -d /app/app'

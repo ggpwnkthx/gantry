@@ -1,14 +1,127 @@
+/*
+ * The style of Gantry.
+ *
+ * The console is read during an outage, at night, on a phone: the palette
+ * is quiet, the contrast is high, and a colour means a state and nothing
+ * else. The tokens are the ones of `DESIGN.md`, and they are the contract
+ * between the screens.
+ */
+
 :root {
   color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --size-text-sm: 0.8125rem;
+  --size-text-md: 0.9375rem;
+  --size-text-lg: 1.125rem;
+  --size-text-xl: 1.5rem;
+  --size-leading: 1.5;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f4f5f7;
+  --color-text: #14171b;
+  --color-text-muted: #59616e;
+  --color-border: #d6dae1;
+  --color-accent: #2449b8;
+  --color-status-ok: #146c43;
+  --color-status-warn: #7a4d00;
+  --color-status-error: #a5221b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: #14171b;
+    --color-surface-sunken: #1b1f25;
+    --color-text: #e8eaee;
+    --color-text-muted: #a2abb8;
+    --color-border: #2c323a;
+    --color-accent: #8fb0ff;
+    --color-status-ok: #56d394;
+    --color-status-warn: #e0b050;
+    --color-status-error: #ff8a80;
+  }
 }
 
 body {
   margin: 0;
-  padding: 2rem;
+  padding: var(--space-6) var(--space-4);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--size-text-md);
+  line-height: var(--size-leading);
+}
+
+h1 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--size-text-xl);
+  font-weight: 600;
+}
+
+p {
+  margin: 0 0 var(--space-2);
+}
+
+#identity,
+#email,
+#tenant,
+#keys,
+#scope,
+#permissions {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--size-text-sm);
+}
+
+table {
+  width: 100%;
+  margin: var(--space-4) 0 var(--space-6);
+  border-collapse: collapse;
+  font-size: var(--size-text-sm);
+}
+
+caption {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--size-text-sm);
+  text-align: left;
+}
+
+th,
+td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
 }
 
 .counter button {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
   font: inherit;
-  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.counter button:hover {
+  border-color: var(--color-accent);
+}
+
+.counter button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

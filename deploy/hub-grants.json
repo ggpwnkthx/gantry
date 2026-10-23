@@ -1,0 +1,43 @@
+{
+  "comment": [
+    "The grants of Gantry, as the batch form of PUT /v1/admin/grants of Hub",
+    "takes them. The keys are the permissions of the plan: gantry.status,",
+    "gantry.admin and gantry.platform.",
+    "",
+    "The scope of a grant is the tenant of the grant: a grant of a tenant",
+    "is a grant of that tenant, and the credential of the tenant reads it",
+    "and nothing else."
+  ],
+  "grants": [
+    {
+      "tenant": "acme",
+      "group": "gantry-readers",
+      "permission": "gantry.status",
+      "routeId": "gantry"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-operators",
+      "permission": "gantry.admin",
+      "routeId": "gantry"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-operators",
+      "permission": "gantry.admin",
+      "routeId": "gantry-admin"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-platform-operators",
+      "permission": "gantry.platform",
+      "routeId": "gantry"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-platform-operators",
+      "permission": "gantry.platform",
+      "routeId": "gantry-admin"
+    }
+  ]
+}
