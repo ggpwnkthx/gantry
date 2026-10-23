@@ -1,6 +1,15 @@
 import {
+  AdminAuditSchema,
+  AdminGrantSchema,
+  AdminGrantsSchema,
+  AdminGroupSchema,
+  AdminGroupsSchema,
+  AdminPrincipalSchema,
   AdminPrincipalsSchema,
   AdminTenantsSchema,
+  type AdminAuditRecord,
+  type AdminGrant,
+  type AdminGroup,
   type AdminPrincipal,
   type AdminTenant,
 } from '../schemas/hub'
@@ -69,26 +78,136 @@ export class HubAdminClient {
     return AdminTenantsSchema.parse(body).tenants
   }
 
+  /** Reads the groups of a tenant. */
+  async groups(tenant: string): Promise<AdminGroup[]> {
+    const body = await this.#get(`/v1/admin/groups?tenant=${encodeURIComponent(tenant)}`)
+    return AdminGroupsSchema.parse(body).groups
+  }
+
+  /** Reads the grants of a tenant. */
+  async grants(tenant: string): Promise<AdminGrant[]> {
+    const body = await this.#get(`/v1/admin/grants?tenant=${encodeURIComponent(tenant)}`)
+    return AdminGrantsSchema.parse(body).grants
+  }
+
+  /**
+   * Reads the audit of the administration.
+   *
+   * The export is the same endpoint with a format: `csv` and `jsonl` are
+   * the files an operator hands to somebody else.
+   */
+  async audit(query: { tenant?: string; action?: string; limit?: number } = {}): Promise<{
+    records: AdminAuditRecord[]
+    total?: number
+  }> {
+    const parameters = new URLSearchParams()
+    if (query.tenant) parameters.set('tenant', query.tenant)
+    if (query.action) parameters.set('action', query.action)
+    if (query.limit) parameters.set('limit', String(query.limit))
+    const suffix = parameters.toString()
+    const body = await this.#get(`/v1/admin/audit${suffix ? `?${suffix}` : ''}`)
+    return AdminAuditSchema.parse(body)
+  }
+
+  /** The export of the audit, as the text of the file. */
+  async auditExport(query: { tenant?: string; format: 'csv' | 'jsonl' }): Promise<string> {
+    const parameters = new URLSearchParams()
+    parameters.set('format', query.format)
+    if (query.tenant) parameters.set('tenant', query.tenant)
+    return await this.#text(`/v1/admin/audit?${parameters.toString()}`)
+  }
+
+  /** Registers a principal of a tenant. */
+  async registerPrincipal(body: {
+    tenant: string
+    externalSubject: string
+    email?: string
+    displayName?: string
+  }): Promise<AdminPrincipal> {
+    return AdminPrincipalSchema.parse(await this.#write('/v1/admin/users', 'POST', body))
+  }
+
+  /** Registers a group of a tenant. */
+  async registerGroup(body: {
+    tenant: string
+    key: string
+    displayName?: string
+    members?: string[]
+  }): Promise<AdminGroup> {
+    return AdminGroupSchema.parse(await this.#write('/v1/admin/groups', 'POST', body))
+  }
+
+  /**
+   * Registers a grant.
+   *
+   * The `grantedBy` is the e-mail of the person who asked for the grant:
+   * it is the one thing of the request that names a person and not the
+   * console.
+   */
+  async putGrant(body: {
+    tenant: string
+    userId?: string
+    group?: string
+    permission: string
+    workspaceId?: string | null
+    routeId?: string | null
+    expiresAt?: string | null
+    grantedBy?: string
+  }): Promise<AdminGrant> {
+    return AdminGrantSchema.parse(await this.#write('/v1/admin/grants', 'PUT', body))
+  }
+
+  /** Revokes a grant. */
+  async revokeGrant(id: string): Promise<void> {
+    await this.#write(`/v1/admin/grants/${encodeURIComponent(id)}`, 'DELETE')
+  }
+
   /** Reads one url of the administration of Hub. */
   async #get(path: string): Promise<unknown> {
-    const response = await fetch(`${this.#options.url}${path}`, {
-      headers: {
-        authorization: `Bearer ${this.#options.credential}`,
-        accept: 'application/json',
-      },
-      signal: AbortSignal.timeout(this.#options.timeoutMs ?? 5_000),
-    })
-    const text = await response.text()
+    const response = await this.#call('GET', path, undefined)
+    return this.#parse(response)
+  }
+
+  /** Writes one url of the administration of Hub. */
+  async #write(path: string, method: string, body?: unknown): Promise<unknown> {
+    const response = await this.#call(method, path, body)
+    return this.#parse(response)
+  }
+
+  /** Reads the text of one url of the administration of Hub. */
+  async #text(path: string): Promise<string> {
+    const response = await this.#call('GET', path, undefined)
     if (!response.ok) {
       throw new HubError(
-        `the administration of Hub answered ${response.status}: ${text.slice(0, 200)}`,
+        `the administration of Hub answered ${response.status}: ${(await response.text()).slice(0, 200)}`,
         response.status
       )
     }
-    try {
-      return JSON.parse(text) as unknown
-    } catch {
-      throw new HubError('the administration of Hub answered a body that is not json', 502)
+    return await response.text()
+  }
+
+  /** The body of an answer of Hub, when it is json. */
+  #parse(response: Response): unknown {
+    if (!response.ok) {
+      throw new HubError(
+        `the administration of Hub answered ${response.status}: ${response.statusText}`,
+        response.status
+      )
     }
+    return response.json() as Promise<unknown>
+  }
+
+  /** Calls the administration of Hub. */
+  async #call(method: string, path: string, body?: unknown): Promise<Response> {
+    return await fetch(`${this.#options.url}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${this.#options.credential}`,
+        accept: 'application/json',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(this.#options.timeoutMs ?? 5_000),
+    })
   }
 }

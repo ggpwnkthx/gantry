@@ -60,6 +60,8 @@ const adminToken = environment.GANTRY_BOOTSTRAP_ADMIN_TOKEN ?? ''
 const platformCredential = environment.GANTRY_BOOTSTRAP_PLATFORM_CREDENTIAL ?? adminToken
 const tenantCredential = environment.GANTRY_BOOTSTRAP_TENANT_CREDENTIAL ?? ''
 const accessContextCredential = environment.GANTRY_BOOTSTRAP_ACCESS_CONTEXT_CREDENTIAL ?? ''
+const controlOperateToken = environment.GANTRY_BOOTSTRAP_CONTROL_OPERATE_TOKEN ?? ''
+const controlConfigToken = environment.GANTRY_BOOTSTRAP_CONTROL_CONFIG_TOKEN ?? ''
 const output = environment.GANTRY_BOOTSTRAP_OUTPUT ?? join(process.cwd(), '.deps', 'keys')
 const configurationFile =
   environment.GANTRY_BOOTSTRAP_CONFIG ?? join(process.cwd(), 'deploy', 'bootstrap.json')
@@ -120,7 +122,29 @@ const accessContext = join(output, 'hub-access-context-token')
 await writeFile(accessContext, accessContextCredential)
 console.log(`the credentials of Gantry are written in ${output}`)
 
-// 6. the key of the identity of the requests.
+// 6. the tokens of the control plane of Shuttle. The scopes do not nest:
+// the token of the scope `operate` revokes the sessions and purges the
+// decisions, and the token of the scope `config` writes the route table.
+if (controlOperateToken || controlConfigToken) {
+  await writeFile(
+    join(output, 'shuttle-control-tokens.json'),
+    `${JSON.stringify(
+      {
+        ...(controlOperateToken
+          ? { [controlOperateToken]: { operator: 'gantry', scope: 'operate' } }
+          : {}),
+        ...(controlConfigToken
+          ? { [controlConfigToken]: { operator: 'gantry', scope: 'config' } }
+          : {}),
+      },
+      null,
+      2
+    )}\n`
+  )
+  console.log('the tokens of the control plane are written')
+}
+
+// 7. the key of the identity of the requests.
 //
 // The key is the key of the deployment: Shuttle signs the identity of the
 // requests it forwards with the private half, and Gantry verifies it with

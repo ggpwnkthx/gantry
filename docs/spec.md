@@ -124,7 +124,52 @@ seconds, through the same origin of Gantry, and the answers of the api
 **must** need the identity and the scope of the caller like every other
 route.
 
-## 5. The probes
+## 5. The administration
+
+5.1. The console **must** show the tenants of the platform, the principals,
+the groups and the grants of a tenant, and the audit of the administration.
+
+5.2. The administration **must** need the permission `gantry.admin`, and
+the tenants of the platform **must** need the permission `gantry.platform`.
+An operator of the platform holds every permission of the console: the
+platform is not scoped to a tenant.
+
+5.3. A tenant operator **must not** reach the administration of another
+tenant, and the data of a tenant **must** be read with the credential of
+that tenant.
+
+5.4. A write **must** be a `POST`, a `PUT` or a `DELETE`, and it **must**
+pass the check of the origin of Hono: the origin that may write is the
+origin the caller used, and the deployment may name the origins it
+accepts in `GANTRY_ALLOWED_ORIGINS`.
+
+5.5. A destructive act — a revoke, a purge, a rollback — **must** ask
+twice, and the second question **must** say what cannot be undone.
+
+5.6. The route table of the deployment **must** be read in the control
+plane of Shuttle, and the rollback of the table **must** be a write of the
+control plane, with the token of the scope `config`. The rollback **must**
+need the permission `gantry.platform`.
+
+5.7. The purge of the sessions and the purge of the cached decisions
+**must** go to the control plane of Shuttle, with the token of the scope
+`operate`.
+
+## 6. The audit of the writes
+
+6.1. Every write of the console **must** write one line on the standard
+output: the id of the request, the e-mail of the operator, the id of the
+principal, the slug of the tenant, the action, the target, and the answer
+of Hub or of the control plane.
+
+6.2. The line **must** be written whatever the answer is: a write that was
+refused is a write that was refused, and it is written down.
+
+6.3. The write of a grant **must** carry the e-mail of the operator in the
+`grantedBy` of the grant, so that Hub keeps the name of the person with
+the grant.
+
+## 7. The probes
 
 4.1. `GET /healthz` **must** answer `200` as long as the process is alive.
 It **must not** depend on Hub and **must not** depend on Shuttle.
@@ -134,7 +179,7 @@ and the public key of the identity is parsed, and `503` otherwise. It
 **must not** depend on Hub: a Hub outage **must not** pull Gantry out of
 the rotation.
 
-## 6. The environment
+## 8. The environment
 
 The configuration is read from the environment of the process, and never
 from `process.env` in the code: the build replaces `process.env` with an
@@ -153,6 +198,9 @@ empty object.
 | `GANTRY_SHUTTLE_METRICS_TOKEN_FILE` | the file of the token of the metrics of the gateway |
 | `GANTRY_HUB_METRICS_TOKEN_FILE` | the file of the token of the metrics of Hub |
 | `GANTRY_STATUS_REFRESH_MS` | the interval of the refresh of the islands, `15000` by default |
+| `GANTRY_SHUTTLE_CONTROL_URL` | the address of the control plane of Shuttle |
+| `GANTRY_SHUTTLE_CONTROL_TOKENS_FILE` | the file of the tokens of the control plane: the token of the scope `operate` and the token of the scope `config` |
+| `GANTRY_ALLOWED_ORIGINS` | the origins that may write, separated by commas |
 
 5.1. A credential **must** live in a file and **must not** reach the
 browser, a log line or an error page.
@@ -160,7 +208,7 @@ browser, a log line or an error page.
 5.2. The file of a credential **must** be read again when it changes: a
 rotation of a credential **must not** need a restart of Gantry.
 
-## 7. The rules of the browser
+## 9. The rules of the browser
 
 6.1. The browser **must** talk to one origin: the gateway. The islands
 **must** call only the same-origin endpoints of Gantry, and **must not**
@@ -172,7 +220,7 @@ the bundle is part of the build.
 6.3. Every page **must** be rendered on the server. The browser carries
 the islands and nothing else.
 
-## 8. The deployment
+## 10. The deployment
 
 7.1. The image of Gantry **must** hold the output of the build and nothing
 else, **must** run as a user that is not `root`, and **must** have its

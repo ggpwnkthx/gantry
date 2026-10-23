@@ -43,6 +43,33 @@ services:
     ports:
       - '8081:8081'
 
+  shared-state:
+    image: redis:7-alpine
+    ports:
+      - '6399:6379'
+    options: >-
+      --health-cmd "redis-cli ping"
+      --health-interval 5s
+      --health-timeout 3s
+      --health-retries 10
+
+  control:
+    image: ghcr.io/ggpwnkthx/shuttle:1.3.0@sha256:20708e9e9e2c140cec2d85ae68b7b7bac3ccd9c37970129a0ba03e6e0a8d56f4
+    entrypoint: ['/bin/sh', '-c']
+    command: ['exec bun run src/control-main.ts']
+    environment:
+      SHUTTLE_CONTROL_HOST: 0.0.0.0
+      SHUTTLE_CONTROL_PORT: 9090
+      SHUTTLE_CONTROL_TOKENS_FILE: /run/secrets/shuttle-control-tokens.json
+      SHUTTLE_CONTROL_STATE_URL: redis://shared-state:6379/0
+      SHUTTLE_LOG_LEVEL: info
+    volumes:
+      - keys:/run/secrets:ro
+    ports:
+      - '9090:9090'
+    depends_on:
+      - shared-state
+
   idp:
     image: oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
     working_dir: /app
@@ -63,6 +90,8 @@ services:
       GANTRY_BOOTSTRAP_PLATFORM_CREDENTIAL: the-admin-token-of-the-stack
       GANTRY_BOOTSTRAP_TENANT_CREDENTIAL: the-credential-of-the-administration-of-acme
       GANTRY_BOOTSTRAP_ACCESS_CONTEXT_CREDENTIAL: the-access-context-token-of-the-stack
+      GANTRY_BOOTSTRAP_CONTROL_OPERATE_TOKEN: the-token-of-the-operate-scope-of-the-stack
+      GANTRY_BOOTSTRAP_CONTROL_CONFIG_TOKEN: the-token-of-the-config-scope-of-the-stack
       GANTRY_BOOTSTRAP_CONFIG: /app/deploy/bootstrap.json
       GANTRY_BOOTSTRAP_OUTPUT: /keys
     volumes:
@@ -92,7 +121,9 @@ services:
       SHUTTLE_ACCESS_URL: http://hub:8081
       SHUTTLE_ACCESS_TOKEN: the-access-token-of-the-stack
       SHUTTLE_SESSION_SECRET: the-session-secret-of-the-stack
-      SHUTTLE_SESSION_URL: memory://local
+      SHUTTLE_SESSION_URL: redis://shared-state:6379/0
+      SHUTTLE_SHARED_STATE_URL: redis://shared-state:6379/0
+      SHUTTLE_CONFIG_SOURCE: store
       SHUTTLE_COOKIE_SECURE: 'false'
       SHUTTLE_EXTERNAL_PROTO: http
       SHUTTLE_LOG_LEVEL: info
@@ -104,6 +135,7 @@ services:
     depends_on:
       - hub
       - bootstrap
+      - shared-state
 
   gantry:
     build:
@@ -115,6 +147,10 @@ services:
       GANTRY_HUB_URL: http://hub:8081
       GANTRY_HUB_ADMIN_TOKENS_FILE: /run/secrets/hub-admin-tokens.json
       GANTRY_HUB_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/hub-access-context-token
+      GANTRY_SHUTTLE_CONTROL_URL: http://control:9090
+      GANTRY_SHUTTLE_CONTROL_TOKENS_FILE: /run/secrets/shuttle-control-tokens.json
+      GANTRY_SHUTTLE_REPLICAS: http://shuttle:8080
+      GANTRY_HUB_REPLICAS: http://hub:8081
     volumes:
       - keys:/run/secrets:ro
     ports:
@@ -122,6 +158,7 @@ services:
     depends_on:
       - hub
       - bootstrap
+      - control
 
 volumes:
   hub-data:

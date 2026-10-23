@@ -55,11 +55,12 @@ components:
 The design system of Gantry is the one of an operations console: it is
 quiet, it is dense, and a colour means a state.
 
-**This document records the system as it is in the milestone 2.** The screens
-of the status are the first screens of the console; the administration (the
-milestone 3) has no screen yet, and the document is rewritten with
-`/impeccable document` when it has one. What is written here is the shell,
-the screens of the status and the tokens they use.
+**This document records the system as it is in the milestone 3.** The screens
+of the status and the screens of the administration are the screens of the
+console; the document is rewritten with `/impeccable document` when the
+screens of the release change it. What is written here is the shell, the
+screens of the status, the forms of the administration and the tokens they
+use.
 
 ## Overview
 
@@ -187,6 +188,30 @@ The table of a status is bounded (`max-width: 64rem`): a table of two
 columns that is stretched over a wide screen is two columns at the two
 ends of the screen. The last column, the one of the numbers, is right
 aligned.
+
+### The form of the administration
+
+A form is a column of fields and a button, in a box with a border of
+`--color-border`:
+
+- the label of a field is the small muted text above the field, and it says
+  what the field is in the words of the console ("the group or the
+  principal", "the permission", "the route"),
+- the button is the action, in the voice of the console: "the grant is
+  written", "the purge",
+- a destructive act asks twice. The second question is a warning in the
+  colour of the state `--color-status-warn` and it says what cannot be
+  undone: "the sessions of *subject* end and the gateway asks Hub again.
+  It cannot be undone.",
+- the answer of a write is a line: green when the write happened, red when
+  it was refused.
+
+### The table of the administration
+
+The tables of the administration are the tables of the status: a caption
+that says what the table holds, a line of `--color-border` between the
+rows, and no zebra. The last column is right aligned when it holds
+numbers.
 
 ### The island
 

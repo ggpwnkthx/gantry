@@ -165,7 +165,9 @@ describe('the scope of the operator', () => {
     const response = await call(bob)
     expect(response.status).toBe(200)
     const body = await response.text()
-    expect(body).toContain('id="scope-header">the platform — gantry.status, gantry.platform<')
+    expect(body).toContain(
+      'id="scope-header">the platform — gantry.admin, gantry.platform, gantry.status<'
+    )
   })
 
   test('a request without a signature is refused', async () => {
@@ -197,8 +199,10 @@ describe('the scope of the operator', () => {
     expect(second).toBe(first)
   })
 
-  test('the route of the administration answers that it is not there yet', async () => {
+  test('a write from another site is refused', async () => {
+    // The origin of a write is the origin the caller used: a write that
+    // comes from somewhere else is refused before it reaches a route.
     const response = await call(alice, { method: 'POST', path: '/' })
-    expect(response.status).toBe(405)
+    expect(response.status).toBe(403)
   })
 })

@@ -128,6 +128,98 @@ test('an operator of the platform reads the numbers of every tenant', async ({ b
   await context.close()
 })
 
+test('the administration of a tenant is there', async ({ browser }) => {
+  const stack = await readStack()
+
+  // The provider of the identity authenticates the next caller as the
+  // operator of the platform: the administration needs the permission of
+  // the administration.
+  await fetch(
+    `${stack.provider}/as/${stack.subjects.operator}/${encodeURIComponent('operator@acme.example')}`
+  )
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto(stack.login)
+  await page.goto(`${stack.shuttle}/hub/tenants/${stack.tenant}`)
+
+  await expect(page.locator('#principals')).toContainText('alice@acme.example')
+  await expect(page.locator('#groups')).toContainText('gantry-readers')
+  await expect(page.locator('#grants')).toContainText('gantry.status')
+  await expect(page.locator('#grant-form')).toBeVisible()
+  await context.close()
+})
+
+test('a grant is written and the console writes its line', async ({ browser }) => {
+  const stack = await readStack()
+  await fetch(
+    `${stack.provider}/as/${stack.subjects.operator}/${encodeURIComponent('operator@acme.example')}`
+  )
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto(stack.login)
+  await page.goto(`${stack.shuttle}/hub/tenants/${stack.tenant}`)
+
+  const before = await page.locator('#grants tbody tr').count()
+  // The grant is a new one: the readers of the status on the route of the
+  // administration. The stack grants the readers of the status on the
+  // route of the status, and a grant of the same tuple is an update.
+  await page.selectOption('#grant-form select[name="subject"]', 'group:gantry-readers')
+  await page.selectOption('#grant-form select[name="permission"]', 'gantry.status')
+  await page.selectOption('#grant-form select[name="routeId"]', 'gantry-admin')
+  await page.locator('#grant-form button[type="submit"]').click()
+
+  // The page comes back with the grant.
+  await expect(page.locator('#grants tbody tr')).toHaveCount(before + 1)
+  await expect(page.locator('#grants')).toContainText('gantry-admin')
+  await context.close()
+})
+
+test('the purge of the sessions of a subject is answered', async ({ browser }) => {
+  const stack = await readStack()
+  await fetch(
+    `${stack.provider}/as/${stack.subjects.operator}/${encodeURIComponent('operator@acme.example')}`
+  )
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto(stack.login)
+  await page.goto(`${stack.shuttle}/ops`)
+
+  await page.locator('#purge-sessions input[name="subject"]').fill(stack.principal)
+  await page.locator('#purge-sessions button[type="submit"]').click()
+  // The dialog asks twice.
+  await expect(page.locator('#purge-sessions .form-warning')).toContainText('the sessions of')
+  await page.locator('#purge-sessions button[type="submit"]').click()
+  await expect(page.locator('#purge-sessions .form-answer')).toContainText(
+    `the sessions of ${stack.principal} are gone`
+  )
+  await context.close()
+})
+
+test('the route table is rolled back to a revision', async ({ browser }) => {
+  const stack = await readStack()
+  await fetch(
+    `${stack.provider}/as/${stack.subjects.operator}/${encodeURIComponent('operator@acme.example')}`
+  )
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto(stack.login)
+  await page.goto(`${stack.shuttle}/ops`)
+
+  await expect(page.locator('#route-table')).toContainText('the revision that is active')
+  const rows = page.locator('#route-table tbody tr')
+  const before = await rows.count()
+  // The rollback of the oldest revision.
+  await rows.last().locator('button').click()
+  await expect(page.locator('#route-table .form-warning')).toContainText(
+    'the table of the deployment'
+  )
+  await page.locator('#route-table .form-warning button').first().click()
+  await expect(page.locator('#route-table')).toContainText('the revision that is active')
+  expect(await rows.count()).toBe(before)
+  await context.close()
+})
+
 test('a request that skips the gateway is refused', async ({ request }) => {
   const stack = await readStack()
   const response = await request.get(`${stack.gantry}/shuttle`)

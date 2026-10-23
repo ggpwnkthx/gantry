@@ -431,3 +431,95 @@ px, and the detector of the tooling was run on the sources.
   is a number of seconds, and it says so.
 
 The detector is clean on the sources of the milestone 2.
+
+## D-022 — The writes of the console are forms, and the check of the origin
+is the one of Hono
+
+**What the plan said.** "Writes need `POST`/`PUT`/`DELETE`, pass Hono's
+`csrf()` origin check, and carry a confirmation step for destructive
+actions (revoke, purge)."
+
+**What the build says.** The check is the one of Hono, and it is in the
+middleware of the routes. It has one consequence: the check of Hono guards
+the requests whose body is a form, and not the requests whose body is json
+— a json request of another site needs a preflight that the browser only
+sends after the server of the other site said yes. The writes of the
+console are therefore **forms**, and the islands send a `FormData`: the
+check of the origin of Hono really runs.
+
+The origin that may write is the origin the caller used: the host of the
+header `x-forwarded-host` and the protocol of the header
+`x-forwarded-proto`. The deployment may name the origins it accepts in
+`GANTRY_ALLOWED_ORIGINS`.
+
+**The evidence.** `test/contract/administration.test.ts`: a write with the
+origin of the console reaches Hub, and a write with the origin of another
+site is refused with a `403` **before** it reaches Hub.
+
+## D-023 — The platform holds every permission of the console
+
+**What the plan said.** "gantry.platform means platform operator; anything
+else is scoped to that tenant."
+
+**What the build says.** An operator of the platform is not scoped to a
+tenant, so it may do everything an operator of a tenant may do, in every
+tenant: the keys of the console (`gantry.status` and `gantry.admin`) are
+added to the keys of the platform. The header of the shell says so — "the
+platform — gantry.admin, gantry.platform, gantry.status" — and the
+administration of every tenant is open to it, with the credential of the
+platform.
+
+**The evidence.** `test/browser/stack.browser.ts`: the operator of the
+platform reaches the administration of the tenant, and the tenant operator
+does not reach the administration of the other tenant.
+
+## D-024 — The stack of the development grew a shared state and the control
+plane
+
+**What the plan said.** "M3 builds the purges, history, validation and
+rollback against the real `shuttle-control` from the pinned Shuttle release,
+not a stand-in."
+
+**What the build says.** The control plane is a service of its own: it acts
+on the shared state of the deployment, and the shared state is a Redis or a
+PostgreSQL. The stack of the development therefore starts three more things
+than it started for the milestone 2: the shared state (the script of the
+pinned Shuttle starts a Redis without docker), the control plane, and the
+route table — which is written in the store through the control plane, so
+that the gateway reads it there and the rollback of the table is a write of
+the same store.
+
+The scopes of the control plane do not nest, and the console holds one
+token of each: the token of the scope `operate` revokes the sessions and
+purges the decisions, and the token of the scope `config` writes the route
+table. The fake of the tests holds the rule: a token of a scope that may
+not do a thing is refused.
+
+**The evidence.** `test/browser/stack.browser.ts`: the purge of the
+sessions of a subject and the rollback of the route table go through the
+**real** control plane of the pinned Shuttle, and the gateway applies the
+table that is rolled back.
+
+## D-025 — The line of the console is the record of the person
+
+**What the plan said.** "Every write logs one JSON line: request id,
+operator email, principal id, tenant, action, target, Hub's or
+`shuttle-control`'s answer. The console passes the operator's email as
+`grantedBy` so Hub's own audit names the person, not just the console's
+credential."
+
+**What the build says.** The line is written whatever the answer is, and
+it is written by the server, on the standard output, as one json object.
+The `grantedBy` of a grant carries the e-mail of the person ✓ — Hub keeps
+it on the grant.
+
+But `grantedBy` exists **only for the grants**: the audit rows of Hub name
+the fingerprint of the credential, and the credential of the console is the
+console. The audit of `shuttle-control` names the operator of the token,
+and the operator of the token is the console. The line of the console is
+therefore the only record of the person for every write, and the `grantedBy`
+of a grant is the copy of it that Hub keeps.
+
+**The evidence.** `test/contract/administration.test.ts`: the line holds the
+e-mail of the operator, the principal, the tenant, the action, the target
+and the answer of Hub or of the control plane.

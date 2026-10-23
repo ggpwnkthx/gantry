@@ -65,6 +65,8 @@ const ACCESS_TOKEN = 'the-access-token-of-the-stack'
 const ACCESS_CONTEXT_TOKEN = 'the-access-context-token-of-the-stack'
 const SESSION_SECRET = 'the-session-secret-of-the-stack'
 const SHUTTLE_METRICS_TOKEN = 'the-metrics-token-of-the-gateway-of-the-stack'
+const CONTROL_OPERATE_TOKEN = 'the-token-of-the-operate-scope-of-the-stack'
+const CONTROL_CONFIG_TOKEN = 'the-token-of-the-config-scope-of-the-stack'
 const HUB_METRICS_TOKEN = 'the-metrics-token-of-hub-of-the-stack'
 const CLIENT_ID = 'shuttle-acme'
 const CLIENT_SECRET = 'the-secret-of-the-gateway-of-the-stack'
@@ -319,6 +321,14 @@ async function main(): Promise<void> {
   const hubPort = await portOf('Hub', Number(process.env.GANTRY_DEV_HUB_PORT ?? 8081))
   const shuttlePort = await portOf('Shuttle', Number(process.env.GANTRY_DEV_SHUTTLE_PORT ?? 8080))
   const gantryPort = await portOf('Gantry', Number(process.env.GANTRY_DEV_GANTRY_PORT ?? 3000))
+  const controlPort = await portOf(
+    'the control plane',
+    Number(process.env.GANTRY_DEV_CONTROL_PORT ?? 9090)
+  )
+  const redisPort = await portOf(
+    'the shared state',
+    Number(process.env.GANTRY_DEV_REDIS_PORT ?? 6399)
+  )
   const hubUrl = `http://127.0.0.1:${hubPort}`
   const shuttleUrl = `http://127.0.0.1:${shuttlePort}`
   const gantryUrl = `http://127.0.0.1:${gantryPort}`
@@ -363,6 +373,20 @@ async function main(): Promise<void> {
       2
     )}\n`
   )
+
+  // The shared state of the deployment: the sessions, the cached decisions
+  // and the route table live in it, and the control plane acts on it. The
+  // script of the pinned Shuttle starts a Redis without docker.
+  console.log('the shared state starts')
+  const redis = await Bun.spawn(
+    ['bash', join(shuttleDirectory, 'scripts', 'redis-dev.sh'), 'start', String(redisPort)],
+    { cwd: shuttleDirectory, stdout: 'inherit', stderr: 'inherit' }
+  )
+  const redisCode = await redis.exited
+  if (redisCode !== 0) {
+    throw new Error('the shared state of the deployment did not start')
+  }
+  const stateUrl = `redis://127.0.0.1:${redisPort}/0`
 
   // The provider of the identity of the tenant.
   const provider: ProviderFixture = await startProviderFixture()
@@ -454,24 +478,33 @@ async function main(): Promise<void> {
     email: BOB.email,
     displayName: BOB.name,
   })
-  await admin(hubUrl, '/v1/admin/grants', 'PUT', {
-    tenant: TENANT.slug,
-    userId: principal.id,
-    permission: 'gantry.status',
-    routeId: 'gantry',
-  })
-  await admin(hubUrl, '/v1/admin/grants', 'PUT', {
-    tenant: TENANT.slug,
-    userId: operator.id,
-    permission: 'gantry.platform',
-    routeId: 'gantry',
-  })
-  await admin(hubUrl, '/v1/admin/grants', 'PUT', {
-    tenant: TENANT.slug,
-    userId: operator.id,
-    permission: 'gantry.status',
-    routeId: 'gantry',
-  })
+  // The groups of the stack, and the grants of the plan: the permissions
+  // are given to the groups, and the principals are the members of the
+  // groups.
+  for (const group of [
+    { key: 'gantry-readers', displayName: 'The readers of Gantry', members: [ALICE.subject] },
+    {
+      key: 'gantry-operators',
+      displayName: 'The operators of Gantry',
+      members: [],
+    },
+    {
+      key: 'gantry-platform-operators',
+      displayName: 'The operators of the platform',
+      members: [OPERATOR.subject],
+    },
+  ]) {
+    await admin(hubUrl, '/v1/admin/groups', 'POST', { tenant: TENANT.slug, ...group })
+  }
+  for (const grant of [
+    { group: 'gantry-readers', permission: 'gantry.status', routeId: 'gantry' },
+    { group: 'gantry-operators', permission: 'gantry.admin', routeId: 'gantry' },
+    { group: 'gantry-operators', permission: 'gantry.admin', routeId: 'gantry-admin' },
+    { group: 'gantry-platform-operators', permission: 'gantry.platform', routeId: 'gantry' },
+    { group: 'gantry-platform-operators', permission: 'gantry.platform', routeId: 'gantry-admin' },
+  ]) {
+    await admin(hubUrl, '/v1/admin/grants', 'PUT', { tenant: TENANT.slug, ...grant })
+  }
   // The other tenant has traffic as well: a gateway has one client of Hub
   // and authenticates the principals of one tenant, so the traffic of the
   // other tenant is asked for here. It is what makes the row of the other
@@ -510,6 +543,79 @@ async function main(): Promise<void> {
   console.log('the question of the access context:')
   console.log(JSON.stringify(answer, null, 2))
 
+  // The tokens of the control plane. The scopes do not nest: the token of
+  // the scope `operate` revokes the sessions and purges the decisions, and
+  // the token of the scope `config` writes the route table.
+  const controlTokensFile = join(keysDirectory, 'shuttle-control-tokens.json')
+  await writeFile(
+    controlTokensFile,
+    `${JSON.stringify(
+      {
+        [CONTROL_OPERATE_TOKEN]: { operator: 'gantry', scope: 'operate' },
+        [CONTROL_CONFIG_TOKEN]: { operator: 'gantry', scope: 'config' },
+      },
+      null,
+      2
+    )}\n`
+  )
+
+  // The control plane: it is the only way to write the state of the
+  // deployment, and the gateway reads the route table from the store.
+  console.log('the control plane starts')
+  const control = Bun.spawn(['bun', 'run', 'src/control-main.ts'], {
+    cwd: shuttleDirectory,
+    env: {
+      PATH: process.env.PATH ?? '',
+      HOME: process.env.HOME ?? '',
+      SHUTTLE_CONTROL_HOST: '127.0.0.1',
+      SHUTTLE_CONTROL_PORT: String(controlPort),
+      SHUTTLE_CONTROL_TOKENS_FILE: controlTokensFile,
+      SHUTTLE_CONTROL_STATE_URL: stateUrl,
+      SHUTTLE_LOG_LEVEL: 'info',
+    },
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+  const controlUrl = `http://127.0.0.1:${controlPort}`
+  await waitFor(`${controlUrl}/readyz`)
+
+  // The route table of the deployment is written in the store, through the
+  // control plane: the gateway reads it there, and the rollback of the
+  // table is a write of the same store.
+  const table = JSON.parse(await readFile(configuration, 'utf8')) as unknown
+  const written = await fetch(`${controlUrl}/v1/config`, {
+    method: 'PUT',
+    headers: {
+      authorization: `Bearer ${CONTROL_CONFIG_TOKEN}`,
+      'content-type': 'application/json',
+      'if-match': '0',
+    },
+    body: JSON.stringify(table),
+  })
+  if (!written.ok) {
+    throw new Error(`the control plane refused the route table: ${await written.text()}`)
+  }
+  const revision = (await written.json()) as { revision: number }
+  console.log(`the route table is the revision ${revision.revision}`)
+
+  // The table is written a second time, so that the history holds more
+  // than one revision and the rollback of the table has something to roll
+  // back to.
+  const rewritten = await fetch(`${controlUrl}/v1/config`, {
+    method: 'PUT',
+    headers: {
+      authorization: `Bearer ${CONTROL_CONFIG_TOKEN}`,
+      'content-type': 'application/json',
+      'if-match': String(revision.revision),
+    },
+    body: JSON.stringify(table),
+  })
+  if (!rewritten.ok) {
+    throw new Error(`the control plane refused the route table: ${await rewritten.text()}`)
+  }
+  const second = (await rewritten.json()) as { revision: number }
+  console.log(`the route table is the revision ${second.revision}`)
+
   // Shuttle: the gateway.
   console.log('Shuttle starts')
   const shuttle = Bun.spawn(['bun', 'run', 'src/main.ts'], {
@@ -518,6 +624,9 @@ async function main(): Promise<void> {
       PATH: process.env.PATH ?? '',
       HOME: process.env.HOME ?? '',
       SHUTTLE_CONFIG: configuration,
+      SHUTTLE_CONFIG_SOURCE: 'store',
+      SHUTTLE_SESSION_URL: stateUrl,
+      SHUTTLE_SHARED_STATE_URL: stateUrl,
       SHUTTLE_GATEWAY_HOST: '127.0.0.1',
       SHUTTLE_GATEWAY_PORT: String(shuttlePort),
       SHUTTLE_OIDC_ISSUER: hubUrl,
@@ -529,7 +638,6 @@ async function main(): Promise<void> {
       SHUTTLE_ACCESS_URL: hubUrl,
       SHUTTLE_ACCESS_TOKEN: ACCESS_TOKEN,
       SHUTTLE_SESSION_SECRET: SESSION_SECRET,
-      SHUTTLE_SESSION_URL: 'memory://local',
       SHUTTLE_COOKIE_SECURE: 'false',
       SHUTTLE_EXTERNAL_PROTO: 'http',
       SHUTTLE_IDENTITY_SIGNING_KEY: keys.privateKey,
@@ -589,6 +697,8 @@ async function main(): Promise<void> {
       GANTRY_HUB_REPLICAS: hubUrl,
       GANTRY_SHUTTLE_METRICS_TOKEN_FILE: shuttleMetricsTokenFile,
       GANTRY_HUB_METRICS_TOKEN_FILE: hubMetricsTokenFile,
+      GANTRY_SHUTTLE_CONTROL_URL: controlUrl,
+      GANTRY_SHUTTLE_CONTROL_TOKENS_FILE: controlTokensFile,
     },
     stdout: 'inherit',
     stderr: 'inherit',
@@ -633,7 +743,14 @@ async function main(): Promise<void> {
     gantry.kill('SIGTERM')
     shuttle.kill('SIGTERM')
     hub.kill('SIGTERM')
-    await Promise.all([gantry.exited, shuttle.exited, hub.exited])
+    control.kill('SIGTERM')
+    await Promise.all([gantry.exited, shuttle.exited, hub.exited, control.exited])
+    await run([
+      'bash',
+      join(shuttleDirectory, 'scripts', 'redis-dev.sh'),
+      'stop',
+      String(redisPort),
+    ])
     await provider.stop()
     process.exit(0)
   }

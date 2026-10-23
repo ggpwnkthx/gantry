@@ -139,12 +139,18 @@ export async function resolveOperatorScope(
   }
 
   const isPlatform = context.permissionKeys.includes(PLATFORM_PERMISSION)
+  // The platform is not scoped to a tenant: an operator of the platform may
+  // do everything an operator of a tenant may do, in every tenant. The keys
+  // of the console are therefore added to the keys of the platform.
+  const permissionKeys = isPlatform
+    ? [...new Set([...context.permissionKeys, STATUS_PERMISSION, ADMIN_PERMISSION])].sort()
+    : context.permissionKeys
   const scope: OperatorScope = {
     subject,
     email,
     tenantId: tenant.id,
     tenantSlug,
-    permissionKeys: context.permissionKeys,
+    permissionKeys,
     platform: isPlatform,
   }
 
