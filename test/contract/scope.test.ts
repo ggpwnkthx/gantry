@@ -117,7 +117,7 @@ async function call(
   options: { method?: string; path?: string; signature?: string } = {}
 ) {
   const method = options.method ?? 'GET'
-  const path = options.path ?? '/'
+  const path = options.path ?? '/shuttle'
   const request = { method, path, query: '', host: 'admin.example.com' }
   const signature =
     options.signature ??
@@ -153,22 +153,19 @@ const carol: Identity = {
 }
 
 describe('the scope of the operator', () => {
-  test('a tenant operator sees the principals of its own tenant and nothing else', async () => {
+  test('a tenant operator is scoped to its own tenant', async () => {
     const response = await call(alice)
     expect(response.status).toBe(200)
     const body = await response.text()
-    expect(body).toContain('alice@acme.example')
-    expect(body).not.toContain('bob@globex.example')
-    expect(body).toContain('the tenant of the caller is acme')
+    expect(body).toContain('id="scope-header">acme — gantry.status<')
+    expect(body).not.toContain('id="scope-header">the platform')
   })
 
-  test('an operator of the platform sees the tenants of the platform', async () => {
+  test('an operator of the platform is scoped to the platform', async () => {
     const response = await call(bob)
     expect(response.status).toBe(200)
     const body = await response.text()
-    expect(body).toContain('acme')
-    expect(body).toContain('globex')
-    expect(body).toContain('the scope of the caller is the platform')
+    expect(body).toContain('id="scope-header">the platform — gantry.status, gantry.platform<')
   })
 
   test('a request without a signature is refused', async () => {
@@ -201,7 +198,7 @@ describe('the scope of the operator', () => {
   })
 
   test('the route of the administration answers that it is not there yet', async () => {
-    const response = await call(alice, { method: 'POST' })
+    const response = await call(alice, { method: 'POST', path: '/' })
     expect(response.status).toBe(405)
   })
 })

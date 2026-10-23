@@ -17,7 +17,14 @@ export default async function renderer(c: Context, next: Next) {
   c.setRenderer((content, head) => {
     const children = content as ComponentChildren
     const title = head?.title
-    return c.html(`<!doctype html>${renderToString(<Layout title={title}>{children}</Layout>)}`)
+    const operator = c.get('operator')
+    return c.html(
+      `<!doctype html>${renderToString(
+        <Layout title={title} operator={operator}>
+          {children}
+        </Layout>
+      )}`
+    )
   })
   await next()
 }

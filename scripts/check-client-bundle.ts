@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const sources = ['app/client.ts', 'app/islands/Counter.tsx']
+  const sources = ['app/client.ts', 'app/islands/LiveStatus.tsx']
   for (const source of sources) {
     const content = await readFile(join(root, source), 'utf8')
     for (const value of importsOf(content)) {

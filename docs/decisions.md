@@ -303,3 +303,131 @@ The compose is **not** exercised in the environment of the build: there is
 no docker there. The same ground is covered by `bun run dev:stack`, which
 runs the same three services with the same revisions, and which the tests
 of the browser do run.
+
+## D-016 — The numbers of the services come from the services themselves
+
+**The question of the plan.** "Is Prometheus available in every deployment,
+or should the console scrape `/metrics` itself as a fallback?"
+
+**The decision.** The console reads the metrics of the replicas it probes,
+and Prometheus is not needed in v1. The answer to the question of the plan
+is therefore the second one: the console scrapes `/metrics` itself, and it
+does it first and not as a fallback.
+
+**Why.** The replicas are the services the console watches: the probes
+already know them, and the metrics of a replica are the truth of that
+replica. A deployment that has no Prometheus is a deployment whose console
+still shows the state of the platform, and the console of an operator during
+an outage is the one thing that must not be missing.
+
+**What it costs.** The trends of the plan — a rate per minute, a chart over
+an hour — are not the metrics of a service: they are a history, and the
+history lives in Prometheus or in the store of the console. The tiles of
+the milestone 2 are counters and gauges, and the counter that moves is read
+again every fifteen seconds. The charts of the plan are a panel of the
+milestone 2 that says what it needs, like the other panels that wait for a
+change of a service.
+
+**The evidence.** `test/contract/status.test.ts`: the numbers of a fake
+gateway are on the page, and a fake Hub that is down is shown as an outage
+and not as a number. `test/browser/stack.browser.ts`: the numbers of the
+**real** gateway and of the **real** Hub of the stack are on the page, and
+the replica of each of them is ready.
+
+## D-017 — The route table and the replica revisions come with the
+milestone 3
+
+**What the plan said.** The v1 includes the read-only view of the route
+table of Shuttle and of its replica revisions, and the plan says that the
+replicas of Shuttle come from `shuttle-control`.
+
+**What the build says.** `shuttle-control` is a service with its own
+shared state (a Redis or a PostgreSQL), its own tokens and its own
+scopes. Bringing it into the stack is the work of the milestone 3, which
+the plan builds against the real `shuttle-control` of the pinned release
+and not a stand-in. The milestone 2 therefore names the replicas of the
+gateway by the environment (`GANTRY_SHUTTLE_REPLICAS`), the same way the
+plan names the replicas of Hub (`GANTRY_HUB_REPLICAS`), and the route
+table and the revisions arrive with the milestone 3.
+
+## D-018 — The status needs the permission of the status, and the numbers of
+the other tenants are for the platform
+
+**What the plan said.** "On-call engineers get read-only status", and the
+grant table gives `gantry.status` to the on-call group.
+
+**The decision.** The status screens need the key `gantry.status`. The
+numbers that break the traffic down by tenant — the decisions of Hub, which
+carry the name of the tenant — are shown to the operators of the platform
+only: a tenant operator reads the row of its own tenant and nothing else.
+
+**Why.** The metrics of Hub are global: the endpoint of the metrics of a
+replica holds the numbers of every tenant. A console that shows them to a
+tenant operator shows the numbers of the other tenants, whatever the
+credential of the console is. The rows are therefore removed from the
+answer of the server, and the browser never receives them.
+
+**The evidence.** `test/browser/stack.browser.ts`: the page of Hub of a
+tenant operator holds the row of its own tenant and not the row of the
+other tenant — and the other tenant has traffic in the stack, so the row
+exists. The page of the operator of the platform holds both rows.
+
+## D-019 — A panel that waits for a change says which service and which
+version
+
+**What the plan said.** "Until a dependency lands, its panel renders a
+clear 'needs Shuttle x.y' or 'needs Hub x.y' state instead of failing or
+showing made-up numbers."
+
+**What the build says.** The panels that wait say it, and they say what
+they will show when they are there: "the upstreams — needs Shuttle 1.4.0:
+the failures of every upstream, one row per upstream: the label of the
+upstream is needed". The versions are the next releases of the two
+services, and they are the versions that carry the changes of the plan.
+
+**The evidence.** `test/contract/status.test.ts`: the page of the gateway
+holds `needs Shuttle 1.4.0` and the page of Hub holds `needs Hub 1.0.2`.
+
+## D-020 — The island reads the status every fifteen seconds, and the
+server reads the services
+
+**What the plan said.** "Islands then refresh through same-origin `/api/*`
+endpoints every 15 seconds, so no credential or upstream address ever
+reaches the browser."
+
+**What the build says.** It is what the build does. The island of the
+status reads `/api/shuttle/status` and `/api/hub/status` every fifteen
+seconds, and the interval is a setting of the server
+(`GANTRY_STATUS_REFRESH_MS`) so that a test may read it faster. The
+endpoints need the identity and the scope of the caller like every other
+route, and the address of a replica and the token of its metrics never
+reach the browser: the browser receives numbers.
+
+**The evidence.** `test/browser/island.browser.ts`: the number of the
+requests of the fake gateway moves while the page is open, and the console
+of the browser stays empty.
+
+## D-021 — The audit of the screens of the milestone 2
+
+**What the plan said.** "After each M2 screen: `/impeccable critique`,
+`/impeccable audit`. Review hierarchy and clarity, accessibility, and
+layout at 390 px."
+
+**What the audit said.** The screens were looked at, at 390 px and at 1280
+px, and the detector of the tooling was run on the sources.
+
+- The tiles had a thick coloured border on one side: the detector calls it
+  "the most recognizable tell of AI-generated UIs", and it was right. The
+  state of a tile is now the colour of the number and a word — "healthy",
+  "degraded", "broken" — because a state is a word and a colour, and never
+  a colour alone.
+- The numbers of a table were stretched over the whole width of a wide
+  screen, which is the opposite of a column that is read down. The tables
+  are bounded and the last column, the one of the numbers, is right
+  aligned.
+- The tiles of a phone were one per row and the page was a long scroll: two
+  per row, and the page is read in one screen and a half.
+- The duration of the decisions was shown as the number "1" with no unit: it
+  is a number of seconds, and it says so.
+
+The detector is clean on the sources of the milestone 2.

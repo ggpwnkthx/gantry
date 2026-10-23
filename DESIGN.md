@@ -55,10 +55,11 @@ components:
 The design system of Gantry is the one of an operations console: it is
 quiet, it is dense, and a colour means a state.
 
-**This document records the system as it is in the milestone 1.** The screens
-of the status (the milestone 2) are shaped with `/impeccable shape` and the
-document is rewritten with `/impeccable document` when they exist. What is
-written here is the shell, the page of the scope and the tokens they use.
+**This document records the system as it is in the milestone 2.** The screens
+of the status are the first screens of the console; the administration (the
+milestone 3) has no screen yet, and the document is rewritten with
+`/impeccable document` when it has one. What is written here is the shell,
+the screens of the status and the tokens they use.
 
 ## Overview
 
@@ -157,6 +158,35 @@ surface, a border of `--color-border` and a radius of `--radius-sm`. Its
 hover is a border of `--color-accent`, and its focus is an outline of
 `--color-accent` of two pixels. The focus is always visible: the reader
 may be on the keyboard.
+
+### The tile
+
+A tile is a number, the name of the number, and the state of the number:
+
+- the number is in the monospace, at the size of a title, with the figures
+  aligned (`tabular-nums`): a column of numbers is read down,
+- the name is the small muted text under the number: it says what the
+  number is, and it is the second thing the reader looks at,
+- the state is a **word** — "healthy", "degraded", "broken" — in the colour
+  of the state. A state is a word and a colour, and never a colour alone.
+
+The tile has one border, of `--color-border`, and no other. A thick
+coloured border on one side of a card is a tic of the interfaces of the
+generators, and it says nothing about the state.
+
+### The panel that is not there yet
+
+A panel that waits for a change of a service is a dashed box with the name
+of the panel, the service and the version that carry it, and what it will
+show. It is the honest answer: the console says that it does not have the
+panel, and why.
+
+### The table of a status
+
+The table of a status is bounded (`max-width: 64rem`): a table of two
+columns that is stretched over a wide screen is two columns at the two
+ends of the screen. The last column, the one of the numbers, is right
+aligned.
 
 ### The island
 
