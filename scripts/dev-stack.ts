@@ -98,11 +98,18 @@ async function run(
  * message: a stack that listens somewhere else is a stack nobody finds.
  */
 async function portOf(name: string, value: number): Promise<number> {
-  const server = Bun.serve({
-    port: value,
-    hostname: '127.0.0.1',
-    fetch: () => new Response('ok'),
-  })
+  let server: ReturnType<typeof Bun.serve> | undefined
+  try {
+    server = Bun.serve({
+      port: value,
+      hostname: '127.0.0.1',
+      fetch: () => new Response('ok'),
+    })
+  } catch {
+    throw new Error(
+      `the port ${value} of ${name} is taken: the stack of the development needs it, and a stack that listens somewhere else is a stack nobody finds`
+    )
+  }
   await server.stop(true)
   console.log(`${name} listens on the port ${value}`)
   return value
@@ -443,8 +450,12 @@ async function main(): Promise<void> {
     await run(['bun', 'run', 'build'])
   }
   console.log('Gantry starts')
-  const gantry = Bun.spawn(['bun', 'run', 'start'], {
-    cwd: process.cwd(),
+  // The server of the build is started directly, and not through
+  // `bun run start`: the script of the start is a shell, and the process of
+  // the server would be its grandchild, a process that outlives the stack
+  // and that keeps the port of Gantry busy after the stack stopped.
+  const gantry = Bun.spawn(['bun', 'index.js'], {
+    cwd: join(process.cwd(), 'dist'),
     env: {
       PATH: process.env.PATH ?? '',
       HOME: process.env.HOME ?? '',
@@ -474,7 +485,10 @@ async function main(): Promise<void> {
   console.log(`  Hub is at ${hubUrl}`)
   console.log('')
 
+  let stopping = false
   const stop = async (): Promise<void> => {
+    if (stopping) return
+    stopping = true
     console.log('')
     console.log('the stack stops')
     gantry.kill('SIGTERM')
@@ -487,13 +501,18 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void stop())
   process.on('SIGTERM', () => void stop())
 
-  // The stack runs until it is stopped.
-  await Promise.all([
-    hub.exited.then(() => undefined),
-    shuttle.exited.then(() => undefined),
-    gantry.exited.then(() => undefined),
+  // The stack runs until it is stopped. A service that dies takes the
+  // stack with it: a stack with a service missing is a stack that answers
+  // in a way nobody expects.
+  const dead = await Promise.race([
+    hub.exited.then(() => 'hub'),
+    shuttle.exited.then(() => 'shuttle'),
+    gantry.exited.then(() => 'gantry'),
   ])
-  await provider.stop()
+  if (!stopping) {
+    console.log(`the service "${dead}" stopped, the stack stops with it`)
+  }
+  await stop()
 }
 
 await main()
