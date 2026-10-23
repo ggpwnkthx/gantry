@@ -14,6 +14,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startFakeHub } from '../test/helpers/fake-hub'
+import { GATEWAY_METRICS, startFakeService } from '../test/helpers/fake-service'
 import { keyFiles } from '../test/helpers/keys'
 
 /** The principal of the tests. */
@@ -34,6 +35,9 @@ const tenant = {
   issuer: 'https://login.acme.example',
   clientId: 'shuttle-acme',
 }
+
+/** The token of the metrics of the services of the tests. */
+const METRICS_TOKEN = 'the-token-of-the-metrics-of-the-tests'
 
 /** The credential of the platform, of the tenant and of the access context. */
 const platformCredential = 'the-credential-of-the-platform-of-the-tests'
@@ -57,6 +61,20 @@ const hub = await startFakeHub({
   accessContextCredential,
 })
 
+// The gateway of the tests: it answers the metrics and the readiness. The
+// number of the requests grows at every answer, so a test may see that the
+// island read the status again.
+let requests = 42
+const gateway = await startFakeService({
+  metrics: () =>
+    GATEWAY_METRICS.replace(
+      'shuttle_requests_total{route="gantry",method="GET",status="200"} 42',
+      `shuttle_requests_total{route="gantry",method="GET",status="200"} ${requests++}`
+    ),
+})
+const metricsTokenFile = join(directory, 'metrics-token')
+await writeFile(metricsTokenFile, METRICS_TOKEN)
+
 const port = Number(process.env.GANTRY_TEST_PORT ?? 3210)
 const server = Bun.spawn(['bun', 'index.js'], {
   cwd: join(process.cwd(), 'dist'),
@@ -69,6 +87,11 @@ const server = Bun.spawn(['bun', 'index.js'], {
     GANTRY_HUB_URL: hub.url,
     GANTRY_HUB_ADMIN_TOKENS_FILE: adminTokensFile,
     GANTRY_HUB_ACCESS_CONTEXT_TOKEN_FILE: accessContextFile,
+    GANTRY_SHUTTLE_REPLICAS: gateway.url,
+    GANTRY_HUB_REPLICAS: gateway.url,
+    GANTRY_SHUTTLE_METRICS_TOKEN_FILE: metricsTokenFile,
+    GANTRY_HUB_METRICS_TOKEN_FILE: metricsTokenFile,
+    GANTRY_STATUS_REFRESH_MS: '1000',
   },
   stdout: 'inherit',
   stderr: 'inherit',
@@ -78,6 +101,7 @@ const stop = async (): Promise<void> => {
   server.kill('SIGTERM')
   await server.exited
   await hub.stop()
+  await gateway.stop()
   await rm(directory, { recursive: true, force: true })
   process.exit(0)
 }

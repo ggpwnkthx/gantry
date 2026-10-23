@@ -4,13 +4,14 @@ import { keyFiles } from '../helpers/keys'
 import { signIdentity } from '../helpers/signing'
 
 /**
- * The island of the page, in the built output.
+ * The island of the status, in the built output.
  *
  * The test proves three things:
  *
- * 1. the island hydrates: the counter answers to a click,
+ * 1. the island hydrates: the numbers of the service are on the page and
+ *    the console of the browser stays empty,
  * 2. the child that the server passed as a prop is in the island,
- * 3. the hydration is clean: the console of the browser has no warning.
+ * 3. the island reads the status again: the numbers move.
  */
 
 const privateKeyPem = readFileSync(keyFiles.privateKey, 'utf8')
@@ -64,18 +65,21 @@ test.beforeEach(async ({ page, baseURL }) => {
   })
 })
 
-test('the island hydrates and keeps the child of the server', async ({ page }) => {
-  await page.goto('/')
+test('the island hydrates, keeps the child of the server and reads the status again', async ({
+  page,
+}) => {
+  await page.goto('/shuttle')
 
-  const button = page.locator('#counter')
-  await expect(button).toHaveText('clicks: 0')
+  // The numbers of the service are on the page, rendered by the server.
+  const requests = page.locator('[data-tile="the requests"]')
+  await expect(requests).toContainText(/\d+/)
+  const first = await requests.textContent()
 
-  // The child of the island is the one the server passed as a prop.
-  await expect(page.locator('#slot-child')).toHaveText('the child of the island')
+  // The child of the server is in the island.
+  await expect(page.locator('#slot-child')).toHaveText('the numbers are of the platform')
 
-  // The island is hydrated: the click changes the state of the browser.
-  await button.click()
-  await expect(button).toHaveText('clicks: 1')
+  // The island reads the status again: the number of the requests moves.
+  await expect.poll(async () => await requests.textContent(), { timeout: 15_000 }).not.toBe(first)
 
   // The hydration is clean.
   expect(messages).toEqual([])
@@ -85,6 +89,6 @@ test('a request without a signature is refused', async ({ page, context }) => {
   // The route of the test signs every request: the request of this test
   // goes out without the headers of the identity.
   await page.unroute('**/*')
-  const response = await context.request.get('/')
+  const response = await context.request.get('/shuttle')
   expect(response.status()).toBe(401)
 })

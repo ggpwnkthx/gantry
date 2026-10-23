@@ -40,6 +40,13 @@ export interface ResolvedOperator {
   validUntil: number
 }
 
+/**
+ * Reports whether the scope of a caller holds a permission.
+ */
+export function hasPermission(scope: OperatorScope, permission: string): boolean {
+  return scope.permissionKeys.includes(permission)
+}
+
 /** The reason why a caller has no scope. */
 export class ScopeError extends Error {
   constructor(message: string) {

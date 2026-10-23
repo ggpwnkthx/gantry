@@ -97,7 +97,34 @@ with a `405` until the administration of Gantry exists. The check of the
 identity and the check of the scope come first: a request without them is
 refused with a `401` or a `403` and not with a `405`.
 
-## 4. The probes
+## 4. The status of the services
+
+4.1. The console **must** show the state of the gateway and the state of
+Hub: the numbers of the services, the state of their replicas, and the
+panels that a service does not carry yet.
+
+4.2. The numbers **must** come from the services themselves: the metrics
+of the replicas that the console probes, and the readiness of the same
+replicas. A number that the console cannot read **must not** be invented:
+the screen says that the source is missing.
+
+4.3. A panel that waits for a change of a service **must** say which
+service and which version carry it, and what it will show. The console
+**must not** show a number it does not have.
+
+4.4. The status screens **must** need the permission `gantry.status`.
+
+4.5. The numbers that break the traffic down by tenant **must** be shown
+to the operators of the platform only. A tenant operator **must not**
+receive the numbers of another tenant, in the page and in the answers of
+the api.
+
+4.6. The island of the status **must** read the status again every fifteen
+seconds, through the same origin of Gantry, and the answers of the api
+**must** need the identity and the scope of the caller like every other
+route.
+
+## 5. The probes
 
 4.1. `GET /healthz` **must** answer `200` as long as the process is alive.
 It **must not** depend on Hub and **must not** depend on Shuttle.
@@ -107,7 +134,7 @@ and the public key of the identity is parsed, and `503` otherwise. It
 **must not** depend on Hub: a Hub outage **must not** pull Gantry out of
 the rotation.
 
-## 5. The environment
+## 6. The environment
 
 The configuration is read from the environment of the process, and never
 from `process.env` in the code: the build replaces `process.env` with an
@@ -121,6 +148,11 @@ empty object.
 | `GANTRY_HUB_URL` | the address of Hub |
 | `GANTRY_HUB_ADMIN_TOKENS_FILE` | the file of the map of the credentials of the administration: the slug of a tenant, or `*` for the platform, to the credential |
 | `GANTRY_HUB_ACCESS_CONTEXT_TOKEN_FILE` | the file of the credential of the access context |
+| `GANTRY_SHUTTLE_REPLICAS` | the addresses of the replicas of the gateway, separated by commas |
+| `GANTRY_HUB_REPLICAS` | the addresses of the replicas of Hub, separated by commas |
+| `GANTRY_SHUTTLE_METRICS_TOKEN_FILE` | the file of the token of the metrics of the gateway |
+| `GANTRY_HUB_METRICS_TOKEN_FILE` | the file of the token of the metrics of Hub |
+| `GANTRY_STATUS_REFRESH_MS` | the interval of the refresh of the islands, `15000` by default |
 
 5.1. A credential **must** live in a file and **must not** reach the
 browser, a log line or an error page.
@@ -128,7 +160,7 @@ browser, a log line or an error page.
 5.2. The file of a credential **must** be read again when it changes: a
 rotation of a credential **must not** need a restart of Gantry.
 
-## 6. The rules of the browser
+## 7. The rules of the browser
 
 6.1. The browser **must** talk to one origin: the gateway. The islands
 **must** call only the same-origin endpoints of Gantry, and **must not**
@@ -140,7 +172,7 @@ the bundle is part of the build.
 6.3. Every page **must** be rendered on the server. The browser carries
 the islands and nothing else.
 
-## 7. The deployment
+## 8. The deployment
 
 7.1. The image of Gantry **must** hold the output of the build and nothing
 else, **must** run as a user that is not `root`, and **must** have its
