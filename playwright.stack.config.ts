@@ -23,7 +23,7 @@ export default defineConfig({
   webServer: {
     command: 'bun run scripts/dev-stack.ts',
     url: `${shuttleUrl}/healthz`,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === 'true',
     timeout: 300_000,
     stdout: 'pipe',
     stderr: 'pipe',

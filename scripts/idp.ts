@@ -33,12 +33,22 @@ export interface ProviderFixture {
   subject: string
   /** The e-mail of the caller. */
   email: string
+  /** Authenticates the next callers as another subject. */
+  authenticateAs: (subject: string, email?: string) => void
   /** Stops the provider. */
   stop: () => Promise<void>
 }
 
+/** The options of the provider. */
+export interface ProviderOptions {
+  /** The port of the provider. The port 0 is a free port. */
+  port?: number
+}
+
 /** Starts the provider of the development stack. */
-export async function startProviderFixture(): Promise<ProviderFixture> {
+export async function startProviderFixture(
+  options: ProviderOptions = {}
+): Promise<ProviderFixture> {
   const pair = generateKeyPairSync('rsa', {
     modulusLength: 2048,
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
@@ -47,17 +57,28 @@ export async function startProviderFixture(): Promise<ProviderFixture> {
   const key: FixtureKey = { kid: 'gantry-fixture-1', privateKey: pair.privateKey }
   const clientId = 'hub-gantry'
   const clientSecret = 'the-secret-of-the-provider-of-the-stack'
-  const subject = 'the-subject-of-the-caller'
-  const email = 'alice@gantry.test'
+  let subject = 'the-subject-of-alice'
+  let email = 'alice@acme.example'
 
   /** The codes of the provider: the nonce of the login travels with them. */
   const codes = new Map<string, { nonce: string; challenge: string; redirectUri: string }>()
 
   const server = Bun.serve({
-    port: 0,
+    port: options.port ?? 0,
     hostname: '127.0.0.1',
     async fetch(request) {
       const url = new URL(request.url)
+
+      // The switch of the caller: the fixture of the development stack
+      // authenticates the next caller as the subject of the url. It is how
+      // the tests of the stack log a second tenant in.
+      if (url.pathname.startsWith('/as/')) {
+        const [, , value, address] = url.pathname.split('/')
+        if (!value) return new Response('not found', { status: 404 })
+        subject = value
+        email = address ? decodeURIComponent(address) : `${value}@acme.example`
+        return new Response(null, { status: 204 })
+      }
 
       if (url.pathname === '/.well-known/openid-configuration') {
         return Response.json({
@@ -136,6 +157,10 @@ export async function startProviderFixture(): Promise<ProviderFixture> {
     clientSecret,
     subject,
     email,
+    authenticateAs: (value: string, address?: string) => {
+      subject = value
+      email = address ?? `${value}@acme.example`
+    },
     stop: async () => {
       await server.stop(true)
     },

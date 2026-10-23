@@ -34,7 +34,7 @@
  * writes the answer in `.deps/access-context-answer.json`.
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { generateKeyPairSync } from 'node:crypto'
 import { startProviderFixture, type ProviderFixture } from './idp'
@@ -64,9 +64,33 @@ const ADMIN_TOKEN = 'the-admin-token-of-the-stack'
 const ACCESS_TOKEN = 'the-access-token-of-the-stack'
 const ACCESS_CONTEXT_TOKEN = 'the-access-context-token-of-the-stack'
 const SESSION_SECRET = 'the-session-secret-of-the-stack'
-const CLIENT_ID = 'shuttle-gantry'
+const CLIENT_ID = 'shuttle-acme'
 const CLIENT_SECRET = 'the-secret-of-the-gateway-of-the-stack'
-const TENANT_SLUG = 'gantry'
+
+/** The tenants of the stack. */
+const TENANT = {
+  slug: 'acme',
+  displayName: 'Acme Inc',
+  idpClientId: 'hub-acme',
+  idpClientSecret: 'the-secret-of-the-provider-of-acme',
+  credential: 'the-credential-of-the-administration-of-acme',
+}
+const OTHER_TENANT = {
+  slug: 'globex',
+  displayName: 'Globex',
+  idpClientId: 'hub-globex',
+  idpClientSecret: 'the-secret-of-the-provider-of-globex',
+  credential: 'the-credential-of-the-administration-of-globex',
+}
+
+/** The principals of the stack. */
+const ALICE = { subject: 'the-subject-of-alice', email: 'alice@acme.example', name: 'Alice' }
+const OPERATOR = {
+  subject: 'the-subject-of-the-operator',
+  email: 'operator@acme.example',
+  name: 'The operator',
+}
+const BOB = { subject: 'the-subject-of-bob', email: 'bob@globex.example', name: 'Bob' }
 
 /** Runs a command and returns its output. */
 async function run(
@@ -341,6 +365,11 @@ async function main(): Promise<void> {
   // The provider of the identity of the tenant.
   const provider: ProviderFixture = await startProviderFixture()
 
+  // The database of the stack is empty at every run: the stack is a
+  // development machine, and a stack that keeps the rows of the runs
+  // before it is a stack whose tenants are the ones of another day.
+  await rm(hubData, { recursive: true, force: true })
+
   // Hub: the broker of the identity and the access decision service.
   console.log('Hub starts')
   const hub = Bun.spawn(['bun', 'run', 'src/main.ts'], {
@@ -354,6 +383,10 @@ async function main(): Promise<void> {
       HUB_PUBLIC_URL: hubUrl,
       HUB_DATABASE_URL: `pglite://${hubData}`,
       HUB_ADMIN_TOKEN: ADMIN_TOKEN,
+      HUB_ADMIN_TOKENS: JSON.stringify({
+        [TENANT.credential]: { tenant: TENANT.slug, operator: 'gantry' },
+        [OTHER_TENANT.credential]: { tenant: OTHER_TENANT.slug, operator: 'gantry' },
+      }),
       HUB_ACCESS_TOKEN: ACCESS_TOKEN,
       HUB_ACCESS_CONTEXT_TOKENS: JSON.stringify({ [ACCESS_CONTEXT_TOKEN]: null }),
       HUB_SECRET_ENCRYPTION_KEY: 'a'.repeat(64),
@@ -370,9 +403,16 @@ async function main(): Promise<void> {
 
   // The tenant, the principal and the grant: they are created through the
   // administration of Hub, the same way a deployment does it.
+  //
+  // The stack has two tenants and three principals:
+  //
+  // - Alice is an operator of the tenant of the stack,
+  // - the operator is an operator of the platform,
+  // - Bob is an operator of the other tenant, and his data is in Hub: a
+  //   tenant operator of the stack never sees it.
   const tenant = await admin(hubUrl, '/v1/admin/tenants', 'POST', {
-    slug: TENANT_SLUG,
-    displayName: 'Gantry',
+    slug: TENANT.slug,
+    displayName: TENANT.displayName,
     issuer: provider.issuer,
     idpClientId: provider.clientId,
     idpClientSecret: provider.clientSecret,
@@ -382,16 +422,45 @@ async function main(): Promise<void> {
     clientRedirectUris: [`${shuttleUrl}/auth/callback`],
   })
   const tenantId = String(tenant.id ?? '')
+  await admin(hubUrl, '/v1/admin/tenants', 'POST', {
+    slug: OTHER_TENANT.slug,
+    displayName: OTHER_TENANT.displayName,
+    issuer: provider.issuer,
+    idpClientId: provider.clientId,
+    idpClientSecret: provider.clientSecret,
+    idpRedirectUri: `${hubUrl}/oauth/tenant/callback`,
+    clientId: 'shuttle-globex',
+    clientSecret: 'the-secret-of-the-gateway-of-globex',
+    clientRedirectUris: [`${shuttleUrl}/auth/callback`],
+  })
   const principal = await admin(hubUrl, '/v1/admin/users', 'POST', {
-    tenant: TENANT_SLUG,
-    externalSubject: provider.subject,
-    email: provider.email,
-    displayName: 'Alice',
+    tenant: TENANT.slug,
+    externalSubject: ALICE.subject,
+    email: ALICE.email,
+    displayName: ALICE.name,
+  })
+  const operator = await admin(hubUrl, '/v1/admin/users', 'POST', {
+    tenant: TENANT.slug,
+    externalSubject: OPERATOR.subject,
+    email: OPERATOR.email,
+    displayName: OPERATOR.name,
+  })
+  await admin(hubUrl, '/v1/admin/users', 'POST', {
+    tenant: OTHER_TENANT.slug,
+    externalSubject: BOB.subject,
+    email: BOB.email,
+    displayName: BOB.name,
   })
   await admin(hubUrl, '/v1/admin/grants', 'PUT', {
-    tenant: TENANT_SLUG,
+    tenant: TENANT.slug,
     userId: principal.id,
     permission: 'gantry.status',
+    routeId: 'gantry',
+  })
+  await admin(hubUrl, '/v1/admin/grants', 'PUT', {
+    tenant: TENANT.slug,
+    userId: operator.id,
+    permission: 'gantry.platform',
     routeId: 'gantry',
   })
   // The question of the plan about the access context: the empty
@@ -404,7 +473,7 @@ async function main(): Promise<void> {
       hubUrl,
       String(principal.id),
       tenantId,
-      TENANT_SLUG
+      TENANT.slug
     ),
   }
   await writeFile(
@@ -444,6 +513,25 @@ async function main(): Promise<void> {
   })
   await waitFor(`${shuttleUrl}/healthz`)
 
+  // The credentials of Hub, as Gantry reads them: they live in files, and
+  // the files are in the directory of the keys.
+  await mkdir(keysDirectory, { recursive: true })
+  const adminTokensFile = join(keysDirectory, 'hub-admin-tokens.json')
+  await writeFile(
+    adminTokensFile,
+    `${JSON.stringify(
+      {
+        '*': ADMIN_TOKEN,
+        [TENANT.slug]: TENANT.credential,
+        [OTHER_TENANT.slug]: OTHER_TENANT.credential,
+      },
+      null,
+      2
+    )}\n`
+  )
+  const accessContextFile = join(keysDirectory, 'hub-access-context-token')
+  await writeFile(accessContextFile, ACCESS_CONTEXT_TOKEN)
+
   // Gantry: the upstream. It runs the build of the deployment.
   if (!existsSync(join(process.cwd(), 'dist', 'index.js'))) {
     console.log('Gantry is built')
@@ -462,6 +550,9 @@ async function main(): Promise<void> {
       GANTRY_PORT: String(gantryPort),
       PORT: String(gantryPort),
       GANTRY_SHUTTLE_IDENTITY_PUBLIC_KEY_FILE: join(keysDirectory, 'identity-public.pem'),
+      GANTRY_HUB_URL: hubUrl,
+      GANTRY_HUB_ADMIN_TOKENS_FILE: adminTokensFile,
+      GANTRY_HUB_ACCESS_CONTEXT_TOKEN_FILE: accessContextFile,
     },
     stdout: 'inherit',
     stderr: 'inherit',
@@ -473,8 +564,16 @@ async function main(): Promise<void> {
     shuttle: shuttleUrl,
     gantry: gantryUrl,
     login: `${shuttleUrl}/auth/login?redirect=%2F`,
-    tenant: TENANT_SLUG,
+    provider: provider.url,
+    tenant: TENANT.slug,
+    otherTenant: OTHER_TENANT.slug,
     principal: principal.id,
+    operator: operator.id,
+    subjects: {
+      alice: ALICE.subject,
+      operator: OPERATOR.subject,
+      bob: BOB.subject,
+    },
   }
   await writeFile(join(dependencies, 'stack.json'), `${JSON.stringify(stack, null, 2)}\n`)
 
@@ -483,6 +582,10 @@ async function main(): Promise<void> {
   console.log(`  the browser logs in at ${stack.login}`)
   console.log(`  the page of Gantry is at ${gantryUrl} (behind Shuttle: ${shuttleUrl})`)
   console.log(`  Hub is at ${hubUrl}`)
+  console.log('')
+  console.log('  the caller of the stack is chosen at the provider of the identity:')
+  console.log(`    curl ${provider.url}/as/${ALICE.subject}`)
+  console.log(`    curl ${provider.url}/as/${OPERATOR.subject}`)
   console.log('')
 
   let stopping = false

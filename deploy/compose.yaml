@@ -1,0 +1,129 @@
+# The stack of the development, with Hub.
+#
+# The stack runs the three services of the plan and the two fixtures that
+# a stack needs:
+#
+# - Hub, the broker of the identity and the access decision service, with
+#   its embedded PostgreSQL,
+# - the provider of the identity of the tenant, a fixture of the
+#   repository,
+# - the registration of the stack: the tenant, the principals, the groups
+#   and the grants, and the credentials of Gantry,
+# - Shuttle, the gateway,
+# - Gantry, the image of the repository.
+#
+# The browser logs in at the gateway:
+#
+#   http://localhost:8080/auth/login?redirect=%2F
+#
+# The images of Hub and of Shuttle are pinned by digest: a tag is a name
+# that moves, and the stack runs the releases that `compatibility.json`
+# pins.
+name: gantry
+
+services:
+  hub:
+    image: ghcr.io/ggpwnkthx/hub:1.0.1@sha256:f74c8b9f367c69154facd835307ac592288ae6e2b81a679ca521e6b70c1a1666
+    environment:
+      HUB_HOST: 0.0.0.0
+      HUB_PORT: 8081
+      HUB_ISSUER: http://hub:8081
+      HUB_PUBLIC_URL: http://hub:8081
+      HUB_DATABASE_URL: pglite:///var/lib/hub/pglite
+      HUB_ADMIN_TOKEN: the-admin-token-of-the-stack
+      HUB_ADMIN_TOKENS: >-
+        {"the-credential-of-the-administration-of-acme":{"tenant":"acme","operator":"gantry"}}
+      HUB_ACCESS_TOKEN: the-access-token-of-the-stack
+      HUB_ACCESS_CONTEXT_TOKENS: '{"the-access-context-token-of-the-stack":null}'
+      HUB_SECRET_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      HUB_STATE_SECRET: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      HUB_ENVIRONMENT: development
+    volumes:
+      - hub-data:/var/lib/hub
+    ports:
+      - '8081:8081'
+
+  idp:
+    image: oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
+    working_dir: /app
+    command: ['sh', '-c', 'bun install --frozen-lockfile && bun run scripts/serve-idp.ts']
+    volumes:
+      - ..:/app:ro
+      - bun-modules:/app/node_modules
+    ports:
+      - '5556:5556'
+
+  bootstrap:
+    image: oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
+    working_dir: /app
+    command: ['sh', '-c', 'bun install --frozen-lockfile && bun run scripts/bootstrap.ts']
+    environment:
+      GANTRY_BOOTSTRAP_HUB_URL: http://hub:8081
+      GANTRY_BOOTSTRAP_ADMIN_TOKEN: the-admin-token-of-the-stack
+      GANTRY_BOOTSTRAP_PLATFORM_CREDENTIAL: the-admin-token-of-the-stack
+      GANTRY_BOOTSTRAP_TENANT_CREDENTIAL: the-credential-of-the-administration-of-acme
+      GANTRY_BOOTSTRAP_ACCESS_CONTEXT_CREDENTIAL: the-access-context-token-of-the-stack
+      GANTRY_BOOTSTRAP_CONFIG: /app/deploy/bootstrap.json
+      GANTRY_BOOTSTRAP_OUTPUT: /keys
+    volumes:
+      - ..:/app:ro
+      - bun-modules:/app/node_modules
+      - keys:/keys
+    depends_on:
+      - hub
+
+  shuttle:
+    image: ghcr.io/ggpwnkthx/shuttle:1.3.0@sha256:20708e9e9e2c140cec2d85ae68b7b7bac3ccd9c37970129a0ba03e6e0a8d56f4
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - >-
+        export SHUTTLE_IDENTITY_SIGNING_KEY="$$(cat /keys/identity-private.pem)";
+        exec bun run src/main.ts
+    environment:
+      SHUTTLE_CONFIG: /etc/shuttle/routes.json
+      SHUTTLE_GATEWAY_HOST: 0.0.0.0
+      SHUTTLE_GATEWAY_PORT: 8080
+      SHUTTLE_OIDC_ISSUER: http://hub:8081
+      SHUTTLE_OIDC_CLIENT_ID: shuttle-acme
+      SHUTTLE_OIDC_CLIENT_SECRET: the-secret-of-the-gateway-of-the-stack
+      SHUTTLE_OIDC_REDIRECT_URI: http://localhost:8080/auth/callback
+      SHUTTLE_OIDC_SCOPES: openid,profile,email
+      SHUTTLE_OIDC_ALLOW_INSECURE: 'true'
+      SHUTTLE_ACCESS_URL: http://hub:8081
+      SHUTTLE_ACCESS_TOKEN: the-access-token-of-the-stack
+      SHUTTLE_SESSION_SECRET: the-session-secret-of-the-stack
+      SHUTTLE_SESSION_URL: memory://local
+      SHUTTLE_COOKIE_SECURE: 'false'
+      SHUTTLE_EXTERNAL_PROTO: http
+      SHUTTLE_LOG_LEVEL: info
+    volumes:
+      - ./compose/shuttle-route.json:/etc/shuttle/routes.json:ro
+      - keys:/keys:ro
+    ports:
+      - '8080:8080'
+    depends_on:
+      - hub
+      - bootstrap
+
+  gantry:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      GANTRY_PORT: 3000
+      GANTRY_SHUTTLE_IDENTITY_PUBLIC_KEY_FILE: /run/secrets/identity-public.pem
+      GANTRY_HUB_URL: http://hub:8081
+      GANTRY_HUB_ADMIN_TOKENS_FILE: /run/secrets/hub-admin-tokens.json
+      GANTRY_HUB_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/hub-access-context-token
+    volumes:
+      - keys:/run/secrets:ro
+    ports:
+      - '3000:3000'
+    depends_on:
+      - hub
+      - bootstrap
+
+volumes:
+  hub-data:
+  bun-modules:
+  keys:

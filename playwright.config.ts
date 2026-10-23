@@ -27,7 +27,7 @@ export default defineConfig({
     baseURL,
   },
   webServer: {
-    command: `bun run build && cd dist && PORT=${port} bun index.js`,
+    command: `bun run build && bun run scripts/serve-built.ts`,
     url: `${baseURL}/healthz`,
     reuseExistingServer: false,
     timeout: 120_000,

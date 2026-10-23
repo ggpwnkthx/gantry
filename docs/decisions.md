@@ -186,3 +186,120 @@ Hub is down and while Shuttle is down, so they are the two paths that the
 middleware of the identity lets through. The readiness reads the public key
 of Shuttle and answers `503` when it cannot: a Gantry that cannot verify an
 identity is not ready.
+
+## D-010 — The scope of the caller is read with two credentials of Hub
+
+**What the plan said.** "The console looks up the caller's principal
+(`GET /v1/admin/users?email=` and match on `x-shuttle-user`) to learn their
+tenant. It then asks `POST /v1/access-context` for their permission keys on
+route `gantry`."
+
+**What the build says.** The lookup needs a credential of the
+administration, and the tenant of the caller is not known before the lookup:
+the credential of the platform is the one that reads every tenant, and it
+is the one of the first step. The keys are read with the credential of the
+access context, which is a read only credential of its own. The credential
+of the *scope* — the one that reads the data of the tenant — is chosen
+afterwards: the credential of the platform for an operator of the platform,
+the credential of the tenant of the caller for the others.
+
+The consequence is worth writing down: **Gantry holds the credential of the
+platform**, and it uses it for one thing only, the lookup of the principal
+of the caller. Every other call of the administration of Hub is made with
+the credential of the tenant of the caller, and Hub refuses a call that
+goes beyond the tenant of its credential. The boundary is therefore held
+twice: by the choice of the credential and by Hub itself.
+
+**The evidence.** `test/contract/scope.test.ts`: a tenant operator sees the
+principals of its own tenant and not the principal of the other tenant, and
+the fake of Hub refuses the call of a credential of a tenant that names
+another tenant. `test/browser/stack.browser.ts`: the same, against the real
+Hub of the stack — the principal of the tenant `globex` is in Hub, and the
+page of the operator of the tenant `acme` does not carry it.
+
+## D-011 — The e-mail of the caller is needed to find its principal
+
+**What the plan said.** The lookup is by e-mail, and the match is on
+`x-shuttle-user`.
+
+**What the build says.** Hub has no lookup of a principal by its id: the
+administration reads the principals by tenant, by state and by e-mail. The
+e-mail of the identity is therefore needed, and a caller without one has no
+scope: it is refused with a `403`. The subject of the identity is the id of
+the principal, and the match on `x-shuttle-user` is what says that the
+principal of the lookup is the caller and not somebody else with the same
+e-mail.
+
+## D-012 — The stack of the development has two tenants and three principals
+
+**What the plan said.** "Creates a tenant, principal and grant through
+Hub's admin API, so a real browser login reaches Gantry."
+
+**What the build says.** The gate of the milestone 1 is that a tenant
+operator sees only its own tenant, and one tenant cannot show it. The
+stack therefore has two tenants — `acme` and `globex` — and three
+principals: Alice, an operator of the tenant of the stack, the operator,
+an operator of the platform, and Bob, an operator of the other tenant.
+Bob cannot log in through the gateway: a gateway has one client of Hub, so
+it authenticates the principals of one tenant. His data is in Hub anyway,
+and the page of Alice does not carry it: that is the gate.
+
+The provider of the identity of the stack authenticates the next caller as
+the subject of its url (`/as/<the subject>`), so a test may log a second
+caller in.
+
+## D-013 — The credentials of Hub are read again when their file changes
+
+**What the plan said.** "Credentials ... live only in the server
+environment, read through `*_FILE` variables."
+
+**What the build says.** The file of a credential is read at every request
+and it is read again when its modification time changes. A rotation of a
+credential is a new content of a file, and a console that needs a restart
+for it is a console that is down at the moment of the rotation.
+
+## D-014 — The design tooling joins at the start of the milestone 1, and
+`PRODUCT.md` is a draft
+
+**What the plan said.** "Start of M1: `npx impeccable install
+--providers=claude --scope=project`, then `/impeccable init` (answered by a
+person)."
+
+**What the build says.** The tooling is installed, and the telemetry is off
+for everyone: `.impeccable/config.json` holds `"telemetry": false`. The
+skills themselves (`.claude/`, `.pi/`) are **not** committed: they carry a
+23 MB binary of the engine, and a teammate installs them with the command
+of the plan.
+
+The `init` of the plan is answered by a person, and it was not: `PRODUCT.md`
+is written from the plan, which is the product context of the person who
+wrote it, and every fact that the plan does not state is either marked as
+an open question at the end of the file or left out. The four open
+questions of the plan are the open questions of the file: the mockups are
+not in the repository, the host of the console is not decided, the
+availability of Prometheus is not decided, and the live updates are not
+decided. **A person has to answer them before the screens of the
+milestone 2 are shaped.**
+
+`DESIGN.md` is the extraction of the system as it is at the end of the
+milestone 1: the shell, the page of the scope and the tokens they use. The
+screens of the status arrive in the milestone 2, and the document is written
+again then.
+
+## D-015 — The compose of the development runs the released images of Hub
+and of Shuttle
+
+**What the plan said.** "dev compose with Hub".
+
+**What the build says.** The compose runs the images of the releases that
+`compatibility.json` pins — `ghcr.io/ggpwnkthx/hub:1.0.1` and
+`ghcr.io/ggpwnkthx/shuttle:1.3.0` — and not the sources of the clones: a
+compose that builds two other repositories is a compose that needs two
+other repositories. The image of Gantry is built from the repository, and
+the fixtures of the stack (the provider of the identity and the
+registration) run the scripts of the repository.
+
+The compose is **not** exercised in the environment of the build: there is
+no docker there. The same ground is covered by `bun run dev:stack`, which
+runs the same three services with the same revisions, and which the tests
+of the browser do run.

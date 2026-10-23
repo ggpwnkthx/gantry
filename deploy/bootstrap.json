@@ -1,0 +1,72 @@
+{
+  "tenant": {
+    "slug": "acme",
+    "displayName": "Acme Inc",
+    "issuer": "http://idp:5556",
+    "idpClientId": "hub-acme",
+    "idpClientSecret": "the-secret-of-the-provider-of-the-stack",
+    "clientId": "shuttle-acme",
+    "clientSecret": "the-secret-of-the-gateway-of-the-stack",
+    "clientRedirectUris": ["http://shuttle:8080/auth/callback"]
+  },
+  "principals": [
+    {
+      "tenant": "acme",
+      "externalSubject": "the-subject-of-alice",
+      "email": "alice@acme.example",
+      "displayName": "Alice"
+    }
+  ],
+  "groups": [
+    {
+      "tenant": "acme",
+      "key": "gantry-readers",
+      "displayName": "The readers of Gantry",
+      "members": ["the-subject-of-alice"]
+    },
+    {
+      "tenant": "acme",
+      "key": "gantry-operators",
+      "displayName": "The operators of Gantry",
+      "members": []
+    },
+    {
+      "tenant": "acme",
+      "key": "gantry-platform-operators",
+      "displayName": "The operators of the platform",
+      "members": []
+    }
+  ],
+  "grants": [
+    {
+      "tenant": "acme",
+      "group": "gantry-readers",
+      "permission": "gantry.status",
+      "routeId": "gantry"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-operators",
+      "permission": "gantry.admin",
+      "routeId": "gantry"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-operators",
+      "permission": "gantry.admin",
+      "routeId": "gantry-admin"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-platform-operators",
+      "permission": "gantry.platform",
+      "routeId": "gantry"
+    },
+    {
+      "tenant": "acme",
+      "group": "gantry-platform-operators",
+      "permission": "gantry.platform",
+      "routeId": "gantry-admin"
+    }
+  ]
+}
