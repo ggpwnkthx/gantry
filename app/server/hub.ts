@@ -35,14 +35,25 @@ const clients = new Map<string, Hub>()
  * that changed is read again: a rotation of a credential does not need a
  * restart of Gantry.
  */
-/** Reads the tokens of the control plane, when the file of them is named. */
+/**
+ * Reads the tokens of the control plane, when the file of them is named.
+ *
+ * A file that is named and that is not there is **not** an error: the
+ * control plane is optional, and a console without it still shows the
+ * status of the platform and still administers the tenants of Hub. The
+ * page of the operations says that the control plane is not there.
+ */
 async function readControlTokensFile(
   environment: Record<string, unknown>
 ): Promise<ControlTokens | undefined> {
   const file = environment.GANTRY_SHUTTLE_CONTROL_TOKENS_FILE
   if (typeof file !== 'string' || file.length === 0) return undefined
   const { readControlTokens } = await import('./clients/shuttle-control')
-  return readControlTokens(await readSecretFile(file))
+  try {
+    return readControlTokens(await readSecretFile(file))
+  } catch {
+    return undefined
+  }
 }
 
 export async function readHub(environment: Record<string, unknown>): Promise<Hub> {

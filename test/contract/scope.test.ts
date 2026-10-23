@@ -80,6 +80,18 @@ let hub: FakeHub
 let directory: string
 
 beforeAll(async () => {
+  // The environment is the one of the process: every file of the tests
+  // names the environment it needs, so that the order of the files does
+  // not change the answer of a test.
+  for (const name of [
+    'GANTRY_SHUTTLE_CONTROL_URL',
+    'GANTRY_SHUTTLE_CONTROL_TOKENS_FILE',
+    'GANTRY_ALLOWED_ORIGINS',
+    'GANTRY_SHUTTLE_REPLICAS',
+    'GANTRY_HUB_REPLICAS',
+  ]) {
+    delete process.env[name]
+  }
   directory = await mkdtemp(join(tmpdir(), 'gantry-scope-'))
   const adminTokens = join(directory, 'hub-admin-tokens.json')
   await writeFile(adminTokens, JSON.stringify(credentials))
